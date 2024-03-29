@@ -1,0 +1,5 @@
+.env_4_SC
+.vscode
+__pycache__
+*.docx
+*.pdf
