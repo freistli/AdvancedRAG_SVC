@@ -1,5 +1,6 @@
 
 import base64
+import json
 import os
 from pathlib import Path
 import sys
@@ -24,7 +25,7 @@ from azure.ai.documentintelligence import DocumentIntelligenceClient
 from fastapi import FastAPI
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
 from llama_index.embeddings.langchain import LangchainEmbedding
-from llama_index.core import VectorStoreIndex, KnowledgeGraphIndex, load_index_from_storage
+from llama_index.core import VectorStoreIndex, KnowledgeGraphIndex, load_index_from_storage, load_indices_from_storage, ComposableGraph, ServiceContext
 from llama_index.core import Settings
 from llama_index.core.graph_stores import SimpleGraphStore
 from llama_index.core.storage import StorageContext
@@ -122,19 +123,31 @@ docClient = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
 
 graph_store = SimpleGraphStore()
 
-if os.path.exists(persist_dir+"/docstore.json"):
-    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-    rules_index = load_index_from_storage(storage_context)
-else:
-            
-    with open(ruleFilePath, 'rb') as file:
-            file_content = file.read() 
+use_storage = True
+startFrom = 120
+batch_size = 10
 
-    docs = docClient.begin_analyze_document(
+if os.path.exists(persist_dir+"/docstore.json") and use_storage:
+    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+    rules_index = load_indices_from_storage(storage_context)
+else:            
+
+    layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
+    if not os.path.exists(layoutJson):
+        with open(ruleFilePath, 'rb') as file:
+            file_content = file.read()
+
+        layoutDocs = docClient.begin_analyze_document(
             "prebuilt-layout",
             analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
             output_content_format="markdown"
-        )
+        )        
+        docs_string = layoutDocs.result().content
+        with open(layoutJson, 'w') as json_file:
+            json.dump(layoutDocs.result().content, json_file)
+    else:
+        with open(layoutJson) as json_file:
+            docs_string = json.load(json_file)  
 
     """
     # Split the document into chunks base on markdown headers.
@@ -143,7 +156,6 @@ else:
     ]
     #splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
     """
-    docs_string = docs.result().content
 
     splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
     rules_content_list = splitter.split_text(docs_string)  # chunk the original content
@@ -156,14 +168,51 @@ else:
         doc = Document(text=rules_content_list[i],id_=str(i))
         docs.append(doc)
     
-    storage_context = StorageContext.from_defaults(graph_store=graph_store)
+    if os.path.exists(persist_dir+"/docstore.json"):
+        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+    else:
+        storage_context = StorageContext.from_defaults(graph_store=graph_store)
     #Construct the Knowlege Graph Undex
+        
+    for i in range(startFrom, len(docs), batch_size):
+        logging.warning(f"Processing batch {i} to {i+batch_size}, total {len(docs)} docs")
+        
+        batch_docs = docs[i:i+batch_size]
+
+        logging.info(str(batch_docs))
+
+        max_retries = 5
+        attempts = 0
+        success = False
+
+        while attempts < max_retries and not success:
+            try:
+                rules_index = KnowledgeGraphIndex.from_documents(
+                    documents=batch_docs,
+                    max_triplets_per_chunk=3,
+                    storage_context=storage_context,
+                    include_embeddings=True,
+                    show_progress=True
+                )
+                success = True
+            except Exception as e:
+                attempts += 1
+                logging.error(f"Failed to create index, retrying {attempts} of {max_retries}")
+                logging.error(str(e))
+
+        logging.warning(f"Persisting batch {i} to {i+batch_size}, total {len(docs)} docs")
+        rules_index.storage_context.persist(persist_dir=persist_dir)
     
+    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+    rules_index = load_indices_from_storage(storage_context)
+
+    """
     rules_index = KnowledgeGraphIndex.from_documents( documents=docs,
                                         max_triplets_per_chunk=3,
                                         storage_context=storage_context,
                                         include_embeddings=True)
     rules_index.storage_context.persist(persist_dir=persist_dir)
+    """
     """
     storage_context = StorageContext.from_defaults()
     rules_index = VectorStoreIndex.from_documents(documents=docs, storage_context=storage_context)
@@ -232,8 +281,23 @@ def proof_read (Content,Draft):
         textSplitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=1024)
 
         to_be_proofread_content_list = textSplitter.split_text(Content)
+        
+        index_summaries = ['KG Index'] * len(rules_index)
 
-        response = rules_index.as_query_engine().query(systemMessage.content + "\r\n Here is the content to be proofread: \r\n "+to_be_proofread_content_list[0])
+        service_context = ServiceContext.from_defaults(
+            llm=Settings.llm,
+            embed_model=Settings.embed_model,
+            node_parser=Settings.node_parser
+        ) 
+
+        graph = ComposableGraph.from_indices(
+                KnowledgeGraphIndex,
+                rules_index,
+                index_summaries=index_summaries,
+                service_context=service_context,
+                storage_context=storage_context)
+
+        response = graph.as_query_engine().query(systemMessage.content + "\r\n Here is the content to be proofread: \r\n "+to_be_proofread_content_list[0])
 
         logging.info(str(response))
 
