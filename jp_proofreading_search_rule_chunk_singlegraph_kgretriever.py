@@ -32,11 +32,14 @@ from llama_index.core.storage import StorageContext
 import tempfile
 import logging
 
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import KnowledgeGraphRAGRetriever
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()
-ruleFilePath = ".//rules//Proofreading_Teach AI.pdf"
+ruleFilePath = ".//rules//rules_original.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
 
@@ -185,8 +188,7 @@ else:
                     storage_context=storage_context,
                     include_embeddings=True,
                     show_progress=True,
-                    #index_id="rules_index")
-                    index_id="teach_index")
+                    index_id="rules_index")
     
     startFrom = 10
 
@@ -271,6 +273,7 @@ while True:
 thread.join()
 """
 
+
 import gradio as gr
 def stream_predict(message, history):
     prompt = ""
@@ -294,10 +297,29 @@ def proof_read (Rules, Content,Draft):
         textSplitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=1024)
 
         to_be_proofread_content_list = textSplitter.split_text(Content)
-        
-        response = rules_index.as_query_engine(verbose=True,max_entities=10,
-            graph_traversal_depth=3).query(Rules + "\r\n 以下の文章を校正してください: \r\n "+to_be_proofread_content_list[0])
 
+        serviceContext = ServiceContext.from_defaults(
+            llm=Settings.llm,
+            embed_model=Settings.embed_model,
+            node_parser=Settings.node_parser
+        )
+        graph_rag_retriever = KnowledgeGraphRAGRetriever(
+            storage_context=storage_context,
+            service_context=serviceContext,
+            llm=Settings.llm,
+            max_entities=10,
+            graph_traversal_depth=3,
+            verbose=True,
+        )
+
+        query_engine = RetrieverQueryEngine.from_args(
+            graph_rag_retriever, service_context=serviceContext
+        )
+
+        
+        #response = rules_index.as_query_engine().query(Rules + "\r\n Here is the content to be proofread: \r\n "+to_be_proofread_content_list[0])
+
+        response = query_engine.query(Rules + "\r\n Here is the content to be proofread: \r\n "+to_be_proofread_content_list[0])
         logging.info(str(response))
 
         return str(response)

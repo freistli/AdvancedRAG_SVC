@@ -36,7 +36,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()
-ruleFilePath = ".//rules//Proofreading_Teach AI.pdf"
+ruleFilePath = ".//rules//rules_original.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
 
@@ -49,6 +49,22 @@ persist_dir=persist_dir+"/"+Path(ruleFilePath).stem
 os.makedirs(persist_dir, exist_ok=True)
 
 logging.info(persist_dir)
+
+trainFilePath = ".//rules//rules_train.pdf"
+
+train_persist_dir=tmpdirname+"/proofreading_rules"
+
+os.makedirs(train_persist_dir, exist_ok=True)
+
+train_persist_dir=train_persist_dir+"/"+Path(trainFilePath).stem
+
+os.makedirs(train_persist_dir, exist_ok=True)
+
+logging.info(train_persist_dir)
+
+train_index = None
+rules_index = None
+composeGraph = None
 
 
 job_done = object() # signals the processing is done
@@ -126,95 +142,98 @@ graph_store = SimpleGraphStore()
 use_storage = True
 batch_size = 10
 
-# Check if the index is already created and stored in the persist directory
-if os.path.exists(persist_dir+"/docstore.json") and use_storage:
-    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-    rules_index = load_index_from_storage(storage_context)
-else:  
-    layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
 
-    # Load the document and analyze the layout from online service
-    if not os.path.exists(layoutJson):
-        with open(ruleFilePath, 'rb') as file:
-            file_content = file.read()
-
-        layoutDocs = docClient.begin_analyze_document(
-            "prebuilt-layout",
-            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-            output_content_format="markdown"
-        )        
-        docs_string = layoutDocs.result().content
-        with open(layoutJson, 'w') as json_file:
-            json.dump(layoutDocs.result().content, json_file)
-
-    # Load the document and analyze the layout from local file
-    else:
-        with open(layoutJson) as json_file:
-            docs_string = json.load(json_file)  
-
-    """
-    # Split the document into chunks base on markdown headers.
-    headers_to_split_on = [
-    ("\n", "Paragraph")
-    ]
-    #splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-    """
-
-    splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
-    rules_content_list = splitter.split_text(docs_string)  
-    #chunk the original content
-    #splits = text_splitter.split_text(docs_string)
-    print(rules_content_list)
-
-    docs = []
-
-    for i in range(len(rules_content_list)):
-        doc = Document(text=rules_content_list[i],id_=str(i))
-        docs.append(doc)
-    
-    if os.path.exists(persist_dir+"/docstore.json"):
+def InitKGRulesIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_size):
+    # Check if the index is already created and stored in the persist directory
+    if os.path.exists(persist_dir+"/docstore.json") and use_storage:
         storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-    else:
-        storage_context = StorageContext.from_defaults(graph_store=graph_store)
-    
-    # Create the index from the documents
-    nodes = Settings.node_parser.get_nodes_from_documents(docs)
+        rules_index = load_index_from_storage(storage_context)
+    else:  
+        layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
 
-    rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
-                                      max_triplets_per_chunk=3,
-                    storage_context=storage_context,
-                    include_embeddings=True,
-                    show_progress=True,
-                    #index_id="rules_index")
-                    index_id="teach_index")
-    
-    startFrom = 10
+        # Load the document and analyze the layout from online service
+        if not os.path.exists(layoutJson):
+            with open(ruleFilePath, 'rb') as file:
+                file_content = file.read()
 
-    for i in range(startFrom, len(nodes), batch_size):
-        logging.warning(f"Processing batch {i} to {i+batch_size}, total {len(nodes)} nodes")
+            layoutDocs = docClient.begin_analyze_document(
+                "prebuilt-layout",
+                analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                output_content_format="markdown"
+            )        
+            docs_string = layoutDocs.result().content
+            with open(layoutJson, 'w') as json_file:
+                json.dump(layoutDocs.result().content, json_file)
+
+        # Load the document and analyze the layout from local file
+        else:
+            with open(layoutJson) as json_file:
+                docs_string = json.load(json_file)  
+
+        """
+        # Split the document into chunks base on markdown headers.
+        headers_to_split_on = [
+        ("\n", "Paragraph")
+        ]
+        #splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+        """
+
+        splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
+        rules_content_list = splitter.split_text(docs_string)  
+        #chunk the original content
+        #splits = text_splitter.split_text(docs_string)
+        print(rules_content_list)
+
+        docs = []
+
+        for i in range(len(rules_content_list)):
+            doc = Document(text=rules_content_list[i],id_=str(i))
+            docs.append(doc)
         
-        batch_nodes = nodes[i:i+batch_size]
+        if os.path.exists(persist_dir+"/docstore.json"):
+            storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+        else:
+            storage_context = StorageContext.from_defaults(graph_store=graph_store)
+        
+        # Create the index from the documents
+        nodes = Settings.node_parser.get_nodes_from_documents(docs)
 
-        logging.info(str(batch_nodes))
+        rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
+                                        max_triplets_per_chunk=3,
+                        storage_context=storage_context,
+                        include_embeddings=True,
+                        show_progress=True,
+                        #index_id="rules_index")
+                        index_id="train_index")
+        
+        startFrom = 10
 
-        max_retries = 5
-        attempts = 0
-        success = False
+        for i in range(startFrom, len(nodes), batch_size):
+            logging.warning(f"Processing batch {i} to {i+batch_size}, total {len(nodes)} nodes")
+            
+            batch_nodes = nodes[i:i+batch_size]
 
-        while attempts < max_retries and not success:
-            try:
-                rules_index.insert_nodes(nodes=batch_nodes)                
-                success = True
-            except Exception as e:
-                attempts += 1
-                logging.error(f"Failed to create index, retrying {attempts} of {max_retries}")
-                logging.error(str(e))
+            logging.info(str(batch_nodes))
 
-        logging.warning(f"Persisting batch {i} to {i+batch_size}, total {len(nodes)} nodes")
-        rules_index.storage_context.persist(persist_dir=persist_dir)
-    
-    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-    rules_index = load_index_from_storage(storage_context)
+            max_retries = 5
+            attempts = 0
+            success = False
+
+            while attempts < max_retries and not success:
+                try:
+                    rules_index.insert_nodes(nodes=batch_nodes)                
+                    success = True
+                except Exception as e:
+                    attempts += 1
+                    logging.error(f"Failed to create index, retrying {attempts} of {max_retries}")
+                    logging.error(str(e))
+
+            logging.warning(f"Persisting batch {i} to {i+batch_size}, total {len(nodes)} nodes")
+            rules_index.storage_context.persist(persist_dir=persist_dir)
+        
+        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+        rules_index = load_index_from_storage(storage_context)
+        return rules_index
 
     """
     rules_index = KnowledgeGraphIndex.from_documents( documents=docs,
@@ -283,10 +302,74 @@ def stream_predict(message, history):
         partial_message = partial_message + chunk.dict()['content']
         yield partial_message
 
-def proof_read (Rules, Content,Draft):
+def compose_query(Graph, QueryRules, to_be_proofread_content_list):
 
-    if str(Rules).strip() == "":
-        Rules = systemMessage.content
+    global rules_index
+    global train_index
+    global composeGraph
+
+    if Graph == "compose": 
+        logging.info("compose")
+        if composeGraph is None:
+
+            if rules_index is None:
+                if os.path.exists(persist_dir+"/docstore.json") and use_storage:
+                    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+                    rules_index = load_index_from_storage(storage_context)
+
+            if train_index is None:
+                if os.path.exists(train_persist_dir+"/docstore.json") and use_storage:
+                    train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
+                    train_index = load_index_from_storage(train_storage_context)
+
+
+        service_context = ServiceContext.from_defaults(
+                llm=Settings.llm,
+                embed_model=Settings.embed_model,
+                node_parser=Settings.node_parser
+            ) 
+        
+        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+
+        composeGraph = ComposableGraph.from_indices(
+                    KnowledgeGraphIndex,
+                    [rules_index,train_index],
+                    index_summaries=['rules knowledge graph index','train knowledge graph index'],
+                    service_context=service_context,
+                    storage_context=storage_context,
+                    include_embeddings=True)
+        
+        response = composeGraph.as_query_engine(verbose=True,max_entities=10,
+            graph_traversal_depth=3, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+to_be_proofread_content_list[0])
+
+    if Graph == "rules":
+        logging.info("rules")
+        if rules_index is None:
+                if os.path.exists(persist_dir+"/docstore.json") and use_storage:
+                    #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+                    storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+                    rules_index = load_index_from_storage(storage_context)
+        response = rules_index.as_query_engine(verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+to_be_proofread_content_list[0])
+    
+    if Graph == "train":
+        logging.info("train")
+        if train_index is None:
+                if os.path.exists(train_persist_dir+"/docstore.json") and use_storage:
+                    #train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
+                    train_storage_context = StorageContext.from_defaults(persist_dir=train_persist_dir)
+                    train_index = load_index_from_storage(train_storage_context)
+        response = train_index.as_query_engine(verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+to_be_proofread_content_list[0])
+    
+    return str(response)
+
+
+def proof_read (Graph, QueryRules, Content,Draft):
+
+    if str(QueryRules).strip() == "":
+        QueryRules = systemMessage.content
+
+    if str(Graph).strip() == "":
+        Graph = "compose"
 
     if str(Content).strip() != "":
         logging.info(Content)
@@ -295,8 +378,7 @@ def proof_read (Rules, Content,Draft):
 
         to_be_proofread_content_list = textSplitter.split_text(Content)
         
-        response = rules_index.as_query_engine(verbose=True,max_entities=10,
-            graph_traversal_depth=3).query(Rules + "\r\n 以下の文章を校正してください: \r\n "+to_be_proofread_content_list[0])
+        response = compose_query(Graph, QueryRules, to_be_proofread_content_list)
 
         logging.info(str(response))
 
@@ -335,38 +417,11 @@ def proof_read (Rules, Content,Draft):
         splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=1024)
         to_be_proofread_content_list = splitter.split_text(docs_string)
 
+        response = compose_query(QueryRules, to_be_proofread_content_list)
 
-        """
+        logging.info(str(response))
 
-        for i in range(len(rules_content_list)):
-
-            prompt1 = "Here are the proofread rules:" + rules_content_list[i] + "\r\n" 
-            
-            prompt2 = "Here is the content to be proofread: "+ "\r\n" + to_be_proofread_content_list[0] 
-            
-            prompt3 = "\r\nHere is the lastest proofread result: "+ currentProofRead +"\r\n" \
-                    
-            prompt4 = "Please provide detailed corrections in Japanese on the content, need to merge with the latest proofread result in the Proofread and Corrections sections."
-
-            message1 = HumanMessage(
-                content=prompt1
-            )
-            message2 = HumanMessage(
-                content=prompt2
-            )
-            message3 = AIMessage(
-                content=prompt3
-            )
-            message4 = HumanMessage(
-                content=prompt4
-            )
-            response = client.stream([systemMessage, message1,message2,message3,message4])
-            partial_message = ""
-            for chunk in response:
-                partial_message = partial_message + chunk.dict()['content']
-                currentProofRead = partial_message
-                yield partial_message
-        """
+        return str(response)
 
 
 js = """
@@ -408,7 +463,7 @@ def read_main():
 with gr.Blocks(title="Proofreading by AI",css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue"),analytics_enabled=False) as custom_theme:
     #gr.ChatInterface(stream_predict).queue().launch()
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    interface = gr.Interface(fn=proof_read, inputs=["text", "text","file"], outputs=["markdown"],allow_flagging="never")
+    interface = gr.Interface(fn=proof_read, inputs=["text", "text", "text","file"], outputs=["markdown"],allow_flagging="never")
 
 #app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
 custom_theme.launch()
