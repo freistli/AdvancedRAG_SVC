@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 
 from dotenv import load_dotenv
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
@@ -110,6 +111,11 @@ loader = AzureAIDocumentIntelligenceLoader(file_path=".//rules//English.docx", a
 docs = loader.load()
 """
 
+import tiktoken
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+token_counter = TokenCountingHandler(
+    tokenizer=tiktoken.encoding_for_model(os.environ['AZURE_OPENAI_Deployment']).encode
+)
 
 #langchain_openai
 client = AzureChatOpenAI(
@@ -132,6 +138,8 @@ llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=10
 Settings.llm = llama_index_llm
 Settings.embed_model = llama_index_embed_model
 Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=llama_index_embed_model)
+Settings.callback_manager = CallbackManager([token_counter])
+
 
 docClient = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
 
@@ -364,6 +372,10 @@ def compose_query(Graph, QueryRules, to_be_proofread_content_list):
 
 
 def proof_read (Graph, QueryRules, Content,Draft):
+    
+    begin = time.time()
+
+    token_counter.reset_counts()
 
     if str(QueryRules).strip() == "":
         QueryRules = systemMessage.content
@@ -381,6 +393,25 @@ def proof_read (Graph, QueryRules, Content,Draft):
         response = compose_query(Graph, QueryRules, to_be_proofread_content_list)
 
         logging.info(str(response))
+
+        print(
+            "Embedding Tokens: ",
+            token_counter.total_embedding_token_count,
+            "\n",
+            "LLM Prompt Tokens: ",
+            token_counter.prompt_llm_token_count,
+            "\n",
+            "LLM Completion Tokens: ",
+            token_counter.completion_llm_token_count,
+            "\n",
+            "Total LLM Token Count: ",
+            token_counter.total_llm_token_count,
+            "\n",
+        )
+
+        end = time.time()
+
+        logging.info("Time elapsed: " + str(end - begin) + " seconds")
 
         return str(response)
 
