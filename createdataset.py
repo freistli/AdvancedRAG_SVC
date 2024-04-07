@@ -1,16 +1,21 @@
 
 import base64
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 import sys
+import time
+import re
 
 from dotenv import load_dotenv
+from fastapi.responses import RedirectResponse
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_experimental.text_splitter import SemanticChunker
+from langchain_text_splitters import TextSplitter, CharacterTextSplitter
 from llama_index.core import Document
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from queue import SimpleQueue
@@ -31,16 +36,11 @@ from llama_index.core.graph_stores import SimpleGraphStore
 from llama_index.core.storage import StorageContext
 import tempfile
 import logging
-import networkx as nx
-from pyvis.network import Network
-
-from matplotlib import pyplot as plt
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()
-#ruleFilePath = ".//rules//KGSample.docx"
 ruleFilePath = ".//rules//rules_original.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
@@ -67,10 +67,36 @@ os.makedirs(train_persist_dir, exist_ok=True)
 
 logging.info(train_persist_dir)
 
-load_dotenv('.env_4_VKG')
+train_index = None
+rules_index = None
+composeGraph = None
+
+
+
+load_dotenv('.env_4_SC')
 
 endpoint = os.environ['DOC_AI_BASE']
 key = os.environ['DOC_AI_KEY']
+
+"""
+# Initiate Azure AI Document Intelligence to load the document. You can either specify file_path or url_path to load the document.
+loader = AzureAIDocumentIntelligenceLoader(file_path=".//rules//English.docx", api_key=key, api_endpoint=endpoint,
+                                           api_model="prebuilt-layout")
+docs = loader.load()
+"""
+
+import tiktoken
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+token_counter = TokenCountingHandler(
+    tokenizer=tiktoken.encoding_for_model(os.environ['AZURE_OPENAI_Deployment']).encode
+)
+
+#langchain_openai
+client = AzureChatOpenAI(
+    openai_api_version="2023-12-01-preview",
+    azure_deployment=os.environ['AZURE_OPENAI_Deployment'],
+    streaming=True)
+
 
 llama_index_llm = AzureChatOpenAI(azure_deployment=os.environ['AZURE_OPENAI_Deployment'],
                            azure_endpoint=os.environ['AZURE_OPENAI_ENDPOINT'],
@@ -85,29 +111,63 @@ llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=10
 Settings.llm = llama_index_llm
 Settings.embed_model = llama_index_embed_model
 Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=llama_index_embed_model)
+Settings.callback_manager = CallbackManager([token_counter])
+
+
+docClient = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
+
+#setup the storage context
 
 graph_store = SimpleGraphStore()
 
 use_storage = True
 batch_size = 10
 
+Draft = ".//rules//train.txt"
 
-'''
-if os.path.exists(train_persist_dir+"/docstore.json") and use_storage:
-    train_storage_context = StorageContext.from_defaults(persist_dir=train_persist_dir)
-    train_index = load_index_from_storage(train_storage_context)
-    logging.info("Loaded train index from storage")
-    g = train_index.get_networkx_graph()
-    net = Network(notebook=True, cdn_resources="in_line", directed=True, height="1200px")
-    net.from_nx(g)
-    net.show("train.html")
-'''
+with open(Draft, 'r') as file:
+        file_content = file.read()
 
-if os.path.exists(persist_dir+"/docstore.json") and use_storage:
-    storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
-    rules_index = load_index_from_storage(storage_context)
-    logging.info("Loaded rules index from storage")
-    g = rules_index.get_networkx_graph()
-    net = Network(notebook=True, cdn_resources="in_line")
-    net.from_nx(g)
-    net.show(Path(ruleFilePath).stem+"_graph.html")
+        textSplitter = CharacterTextSplitter( chunk_size=200, separator="====", is_separator_regex=False)
+
+        to_be_proofread_content_list = textSplitter.split_text(file_content)        
+
+print("Number of chunks: ", len(to_be_proofread_content_list))
+for i in range(len(to_be_proofread_content_list)):
+    print("Chunk " + str(i) +"\r\n")
+    clean_paragraph = re.sub(r'\n\s*\n', '\n', to_be_proofread_content_list[i])
+    print("\r\n"+clean_paragraph)
+    to_be_proofread_content_list[i] = clean_paragraph
+
+
+
+# The system message
+system_message = {
+    "role": "system",
+    "content": "You are an experienced Japanese Proofreader. You are tasked with proofreading the following text. Please correct any errors you find and provide a reason for each correction."
+}
+
+# Convert each string in the array to a set of messages
+json_objects = ""
+i = 0
+for string in to_be_proofread_content_list:
+    print("Count: " + str(i)) 
+    # Split the string into the original text, the correction, and the reason
+    original_text, correction, reason = string.split("\n")
+
+    # Create the user and assistant messages
+    user_message = {"role": "user", "content": original_text}
+    assistant_message = {"role": "assistant", "content": correction + "\n" + reason}
+
+    # Create the JSON object
+    json_object = {"messages": [system_message, user_message, assistant_message]}
+
+    json_string = json.dumps(json_object,ensure_ascii=True,indent=0).replace('\n', '').replace('\r', '').replace('\t', '')
+
+    # Add the JSON object to the list
+    json_objects = json_objects + json_string + "\n"
+    i += 1
+
+# Write the JSON objects to a file
+with open("proofreading_dataset_v2.jsonl", "w") as file:
+    file.write(json_objects)

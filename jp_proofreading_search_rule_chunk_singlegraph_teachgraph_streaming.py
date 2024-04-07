@@ -8,6 +8,7 @@ import sys
 import time
 
 from dotenv import load_dotenv
+from fastapi.responses import RedirectResponse
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
@@ -116,12 +117,12 @@ docs = loader.load()
 import tiktoken
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 token_counter = TokenCountingHandler(
-    tokenizer=tiktoken.encoding_for_model(os.environ['AZURE_OPENAI_Deployment']).encode
+    tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
 )
 
 #langchain_openai
 client = AzureChatOpenAI(
-    openai_api_version="2023-12-01-preview",
+    openai_api_version="2024-02-15-preview",
     azure_deployment=os.environ['AZURE_OPENAI_Deployment'],
     streaming=True,
     callbacks=[StreamingGradioCallbackHandler(q)]
@@ -153,7 +154,7 @@ use_storage = True
 batch_size = 10
 
 
-def InitKGRulesIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_size):
+def GenerateKGIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_size):
     # Check if the index is already created and stored in the persist directory
     if os.path.exists(persist_dir+"/docstore.json") and use_storage:
         storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
@@ -241,6 +242,7 @@ def InitKGRulesIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_
             logging.warning(f"Persisting batch {i} to {i+batch_size}, total {len(nodes)} nodes")
             rules_index.storage_context.persist(persist_dir=persist_dir)
         
+        rules_index.storage_context.persist(persist_dir=persist_dir)
         storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
         rules_index = load_index_from_storage(storage_context)
         return rules_index
@@ -313,18 +315,21 @@ def compose_query(Graph, QueryRules, content):
     global train_index
     global composeGraph
 
+    rules_storage_dir=".//rules//storage"+"/"+Path(ruleFilePath).stem
+    train_storage_dir=".//rules//storage"+"/"+Path(trainFilePath).stem
+
     if Graph == "compose": 
         logging.info("compose")
         if composeGraph is None:
 
             if rules_index is None:
-                if os.path.exists(persist_dir+"/docstore.json") and use_storage:
-                    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+                if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
+                    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
                     rules_index = load_index_from_storage(storage_context)
 
             if train_index is None:
-                if os.path.exists(train_persist_dir+"/docstore.json") and use_storage:
-                    train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
+                if os.path.exists(train_storage_dir+"/docstore.json") and use_storage:
+                    train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_storage_dir)
                     train_index = load_index_from_storage(train_storage_context)
 
 
@@ -334,7 +339,7 @@ def compose_query(Graph, QueryRules, content):
                 node_parser=Settings.node_parser
             ) 
         
-        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
 
         composeGraph = ComposableGraph.from_indices(
                     KnowledgeGraphIndex,
@@ -350,18 +355,18 @@ def compose_query(Graph, QueryRules, content):
     if Graph == "rules":
         logging.info("rules")
         if rules_index is None:
-                if os.path.exists(persist_dir+"/docstore.json") and use_storage:
+                if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
                     #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-                    storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+                    storage_context = StorageContext.from_defaults(persist_dir=rules_storage_dir)
                     rules_index = load_index_from_storage(storage_context)
         response_stream = rules_index.as_query_engine(streaming=True,verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
     
     if Graph == "train":
         logging.info("train")
         if train_index is None:
-                if os.path.exists(train_persist_dir+"/docstore.json") and use_storage:
+                if os.path.exists(train_storage_dir+"/docstore.json") and use_storage:
                     #train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
-                    train_storage_context = StorageContext.from_defaults(persist_dir=train_persist_dir)
+                    train_storage_context = StorageContext.from_defaults(persist_dir=train_storage_dir)
                     train_index = load_index_from_storage(train_storage_context)
         response_stream = train_index.as_query_engine(streaming=True, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
     
@@ -499,12 +504,16 @@ var gradioContainer = document.querySelector('.gradio-container');
 app = FastAPI()
 @app.get("/")
 def read_main():
-    return {"message": "This is your main app"}
+    return RedirectResponse(url="/proofread")
 
-with gr.Blocks(title="Proofreading by AI",css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue"),analytics_enabled=False) as custom_theme:
-    #gr.ChatInterface(stream_predict).queue().launch()
+texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules (rules, train, compose)", value="rules")
+textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
+textbox_Content = gr.Textbox(lines=10, label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
+
+
+with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    interface = gr.Interface(fn=proof_read, inputs=["text", "text", "text","file"], outputs=["markdown"],allow_flagging="never")
+    interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, textbox_QueryRules, textbox_Content,"file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
-#app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
-custom_theme.launch()
+app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
+#custom_theme.launch()
