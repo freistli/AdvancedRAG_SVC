@@ -197,6 +197,8 @@ def GenerateKGIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_s
 
         rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
                                         max_triplets_per_chunk=5,
+                                        #kg_triple_extract_template=
+                                        #kg_triplet_extract_fn=
                         storage_context=storage_context,
                         include_embeddings=True,
                         show_progress=True,

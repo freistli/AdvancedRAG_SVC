@@ -35,6 +35,18 @@ from llama_index.core.graph_stores import SimpleGraphStore
 from llama_index.core.storage import StorageContext
 import tempfile
 import logging
+from llama_index.core.postprocessor.optimizer import SentenceEmbeddingOptimizer
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import KnowledgeGraphRAGRetriever
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+from llama_index.core.callbacks import LlamaDebugHandler
+
+optimizer = SentenceEmbeddingOptimizer(
+    percentile_cutoff=0.5,
+    threshold_cutoff=0.7,
+    context_before=1,
+    context_after=1
+)
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
@@ -69,11 +81,20 @@ logging.info(train_persist_dir)
 train_index = None
 rules_index = None
 composeGraph = None
-
+graph_store = None
+query_engine = None
 
 job_done = object() # signals the processing is done
 
 q = SimpleQueue()
+
+class FineTune:
+    def __init__(self,  max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):    
+        self.graph_traversal_depth = graph_traversal_depth
+        self.max_entities = max_entities
+        self.max_synonyms = max_synonyms
+        self.max_knowledge_sequence = max_knowledge_sequence
+
 class StreamingGradioCallbackHandler(BaseCallbackHandler):
     def __init__(self, q: SimpleQueue):
         self.q = q
@@ -115,10 +136,7 @@ docs = loader.load()
 """
 
 import tiktoken
-from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
-token_counter = TokenCountingHandler(
-    tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
-)
+
 
 #langchain_openai
 client = AzureChatOpenAI(
@@ -137,18 +155,20 @@ llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=10
                                                              model="text-embedding-ada-002",
                                                              deployment="text-embedding-ada-002",
                                                              openai_api_key=os.environ['AZURE_OPENAI_API_KEY']))
+
+
  
 Settings.llm = llama_index_llm
 Settings.embed_model = llama_index_embed_model
 Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=llama_index_embed_model)
-Settings.callback_manager = CallbackManager([token_counter])
+llama_debug = LlamaDebugHandler(print_trace_on_end=True)
+token_counter = TokenCountingHandler(
+    tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
+)
+Settings.callback_manager = CallbackManager([token_counter,llama_debug])
 
 
 docClient = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
-
-#setup the storage context
-
-graph_store = SimpleGraphStore()
 
 use_storage = True
 batch_size = 10
@@ -276,9 +296,7 @@ prompt="Based on the proof read rule:"+rules_content_list[0]+"\r\n"+"provide det
 """ 
 prompt = ""
 systemMessage = SystemMessage(
-    content = "Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語 proofread rules, don't use other rules those are not in the retrieved documents.  \
-              Pay attention to some known issues:もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない. \
-              Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
+    content = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents.                Pay attention to some known issues:もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない, 優位性を意味する語.               Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
 )
 message = HumanMessage(
     content=prompt
@@ -309,11 +327,22 @@ def stream_predict(message, history):
         partial_message = partial_message + chunk.dict()['content']
         yield partial_message
 
-def compose_query(Graph, QueryRules, content):
+def DebugLlama():
+    event_pairs = llama_debug.get_llm_inputs_outputs()
+    try:
+        print('\n\n=========================================\n\n')
+        print(event_pairs)          
+    except:
+        print("Error")
+    llama_debug.flush_event_logs()
+
+def compose_query(Graph, QueryRules, content, fine_tune=None):
 
     global rules_index
     global train_index
     global composeGraph
+    global graph_store
+    global query_engine
 
     rules_storage_dir=".//rules//storage"+"/"+Path(ruleFilePath).stem
     train_storage_dir=".//rules//storage"+"/"+Path(trainFilePath).stem
@@ -354,12 +383,46 @@ def compose_query(Graph, QueryRules, content):
 
     if Graph == "rules":
         logging.info("rules")
-        if rules_index is None:
+        #if rules_index is None:
+        if query_engine is None:
                 if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
                     #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-                    storage_context = StorageContext.from_defaults(persist_dir=rules_storage_dir)
-                    rules_index = load_index_from_storage(storage_context)
-        response_stream = rules_index.as_query_engine(streaming=True,verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
+
+                    if graph_store is None:
+                        graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)
+
+                    storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
+                    
+                    #rules_index = load_index_from_storage(storage_context)
+
+                graph_rag_retriever = KnowledgeGraphRAGRetriever(
+                    storage_context=storage_context,
+                    llm=Settings.llm,
+                    #entity_extract_template="",
+                    #synonym_expand_template="",
+                    graph_traversal_depth=fine_tune.graph_traversal_depth,
+                    max_entities=fine_tune.max_entities,
+                    max_synonyms=fine_tune.max_synonyms,
+                    max_knowledge_sequence=fine_tune.max_knowledge_sequence,
+                    verbose=True          
+                )
+
+                DebugLlama()
+
+                query_engine = RetrieverQueryEngine.from_args(
+                    graph_rag_retriever,
+                    streaming=True,
+                    verbose=True
+                )
+
+                DebugLlama()
+
+        #response_stream = rules_index.as_query_engine(streaming=True,optimizer=optimizer,storage_context=storage_context,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
+        response_stream = query_engine.query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content) 
+
+        DebugLlama()
+        
+        
     
     if Graph == "train":
         logging.info("train")
@@ -368,7 +431,7 @@ def compose_query(Graph, QueryRules, content):
                     #train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
                     train_storage_context = StorageContext.from_defaults(persist_dir=train_storage_dir)
                     train_index = load_index_from_storage(train_storage_context)
-        response_stream = train_index.as_query_engine(streaming=True, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
+        response_stream = train_index.as_query_engine(streaming=True, optimizer=optimizer,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
     
     partial_message = ""
     for text in response_stream.response_gen:
@@ -378,7 +441,7 @@ def compose_query(Graph, QueryRules, content):
 
 
 
-def proof_read (Graph, QueryRules, Content,Draft):
+def proof_read (Graph, QueryRules, max_entities, max_synonyms, graph_traversal_depth,max_knowledge_sequence, Content,Draft ):
     
     begin = time.time()
 
@@ -423,14 +486,15 @@ def proof_read (Graph, QueryRules, Content,Draft):
 
         to_be_proofread_content_list = textSplitter.split_text(docs_string)        
 
-
+    fine_tune = FineTune(max_entities, max_synonyms,graph_traversal_depth,max_knowledge_sequence)
+    
     with open(os.path.join(persist_dir, filename + '_proofread_result.md'), 'a') as f:
         for i in range(len(to_be_proofread_content_list)):             
             status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
             try:                        
                 logging.info(status)
                 logging.info("processing content: " + to_be_proofread_content_list[i])
-                response = compose_query(Graph, QueryRules, to_be_proofread_content_list[i])
+                response = compose_query(Graph, QueryRules, to_be_proofread_content_list[i],fine_tune)
                 currentProofRead = ""
                 for text in response:
                     status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
@@ -505,6 +569,12 @@ app = FastAPI()
 @app.get("/")
 def read_main():
     return RedirectResponse(url="/proofread")
+ 
+
+max_entities = gr.Slider(label="Max Entities", value=10, minimum=1, maximum=10, step=1)
+max_synonyms = gr.Slider(label="Max Synonyms", value=5, minimum=1, maximum=10, step=1)
+graph_traversal_depth = gr.Slider(label="Graph Traversal Depth", value=2, minimum=1, maximum=10, step=1)
+max_knowledge_sequence = gr.Slider(label="Max Knowledge Sequence", value=30, minimum=1, maximum=50, step=1)
 
 texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules (rules, train, compose)", value="rules")
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
@@ -513,7 +583,14 @@ textbox_Content = gr.Textbox(lines=10, label="Content to be Proofread", value="�
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, textbox_QueryRules, textbox_Content,"file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+    interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
+                                                    textbox_QueryRules, 
+                                                    max_entities,
+                                                    max_synonyms,
+                                                    graph_traversal_depth,
+                                                    max_knowledge_sequence,
+                                                    textbox_Content,                                                    
+                                                    "file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
-app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
-#custom_theme.launch()
+#app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
+custom_theme.launch()
