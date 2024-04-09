@@ -83,6 +83,7 @@ rules_index = None
 composeGraph = None
 graph_store = None
 query_engine = None
+current_fine_Tune = None
 
 job_done = object() # signals the processing is done
 
@@ -94,6 +95,13 @@ class FineTune:
         self.max_entities = max_entities
         self.max_synonyms = max_synonyms
         self.max_knowledge_sequence = max_knowledge_sequence
+
+    def __eq__(self, other):
+        return self.graph_traversal_depth == other.graph_traversal_depth and \
+                    self.max_entities == other.max_entities and \
+                    self.max_synonyms == other.max_synonyms and \
+                    self.max_knowledge_sequence == other.max_knowledge_sequence
+        
 
 class StreamingGradioCallbackHandler(BaseCallbackHandler):
     def __init__(self, q: SimpleQueue):
@@ -343,6 +351,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
     global composeGraph
     global graph_store
     global query_engine
+    global current_fine_Tune
 
     rules_storage_dir=".//rules//storage"+"/"+Path(ruleFilePath).stem
     train_storage_dir=".//rules//storage"+"/"+Path(trainFilePath).stem
@@ -389,33 +398,48 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                     #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
 
                     if graph_store is None:
-                        graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)
-
+                        graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)                    
                     storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
-                    
-                    #rules_index = load_index_from_storage(storage_context)
+                    rules_index = load_index_from_storage(storage_context)
 
-                graph_rag_retriever = KnowledgeGraphRAGRetriever(
-                    storage_context=storage_context,
-                    llm=Settings.llm,
-                    #entity_extract_template="",
-                    #synonym_expand_template="",
-                    graph_traversal_depth=fine_tune.graph_traversal_depth,
-                    max_entities=fine_tune.max_entities,
-                    max_synonyms=fine_tune.max_synonyms,
-                    max_knowledge_sequence=fine_tune.max_knowledge_sequence,
-                    verbose=True          
-                )
+        if current_fine_Tune is None or current_fine_Tune != fine_tune:
 
-                DebugLlama()
+            print("Fine Tune changed")
 
-                query_engine = RetrieverQueryEngine.from_args(
-                    graph_rag_retriever,
-                    streaming=True,
-                    verbose=True
-                )
+            storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
+            '''
+            graph_rag_retriever = KnowledgeGraphRAGRetriever(
+                storage_context=storage_context,
+                llm=Settings.llm,
+                #entity_extract_template="",
+                #synonym_expand_template="",
+                graph_traversal_depth=fine_tune.graph_traversal_depth,
+                max_entities=fine_tune.max_entities,
+                max_synonyms=fine_tune.max_synonyms,
+                max_knowledge_sequence=fine_tune.max_knowledge_sequence,
+                verbose=True          
+            )
+            '''
 
-                DebugLlama()
+            temp_retriever = rules_index.as_retriever(
+                #entity_extract_template="",
+                #synonym_expand_template="",
+                graph_traversal_depth=fine_tune.graph_traversal_depth,
+                max_entities=fine_tune.max_entities,
+                max_synonyms=fine_tune.max_synonyms,
+                max_knowledge_sequence=fine_tune.max_knowledge_sequence,
+                verbose=True )
+
+            query_engine = RetrieverQueryEngine.from_args(
+                #graph_rag_retriever,
+                temp_retriever,
+                streaming=True,
+                verbose=True
+            )
+
+            current_fine_Tune = fine_tune
+
+                
 
         #response_stream = rules_index.as_query_engine(streaming=True,optimizer=optimizer,storage_context=storage_context,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
         response_stream = query_engine.query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content) 
@@ -431,17 +455,17 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                     #train_storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=train_persist_dir)
                     train_storage_context = StorageContext.from_defaults(persist_dir=train_storage_dir)
                     train_index = load_index_from_storage(train_storage_context)
-        response_stream = train_index.as_query_engine(streaming=True, optimizer=optimizer,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
+        response_stream = train_index.as_query_engine(streaming=True,graph_traversal_depth=3, verbose=True).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
     
     partial_message = ""
     for text in response_stream.response_gen:
         partial_message = partial_message + text
         # do something with text as they arrive.
         yield partial_message
+    DebugLlama()
 
 
-
-def proof_read (Graph, QueryRules, max_entities, max_synonyms, graph_traversal_depth,max_knowledge_sequence, Content,Draft ):
+def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):
     
     begin = time.time()
 
@@ -571,7 +595,7 @@ def read_main():
     return RedirectResponse(url="/proofread")
  
 
-max_entities = gr.Slider(label="Max Entities", value=10, minimum=1, maximum=10, step=1)
+max_entities = gr.Slider(label="Max Entities", value=5, minimum=1, maximum=10, step=1)
 max_synonyms = gr.Slider(label="Max Synonyms", value=5, minimum=1, maximum=10, step=1)
 graph_traversal_depth = gr.Slider(label="Graph Traversal Depth", value=2, minimum=1, maximum=10, step=1)
 max_knowledge_sequence = gr.Slider(label="Max Knowledge Sequence", value=30, minimum=1, maximum=50, step=1)
@@ -585,12 +609,24 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules, 
+                                                    textbox_Content,                                                    
+                                                    "file",
                                                     max_entities,
                                                     max_synonyms,
                                                     graph_traversal_depth,
                                                     max_knowledge_sequence,
+                                                    ], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+
+app = gr.mount_gradio_app(app, custom_theme, path="/advproofread")
+
+
+with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
+                                                    textbox_QueryRules,
                                                     textbox_Content,                                                    
                                                     "file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
-#app = gr.mount_gradio_app(app, custom_theme, path="/proofread")
-custom_theme.launch()
+app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
+
+#custom_theme.launch()
