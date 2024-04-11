@@ -8,7 +8,7 @@ import sys
 import time
 
 from dotenv import load_dotenv
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
@@ -590,9 +590,11 @@ var gradioContainer = document.querySelector('.gradio-container');
 """
 
 app = FastAPI()
-@app.get("/")
+@app.get("/",response_class=HTMLResponse)
 def read_main():
-    return RedirectResponse(url="/proofread")
+    with open('UI.html', 'r') as file:
+        html_content = file.read()    
+    return html_content
  
 
 max_entities = gr.Slider(label="Max Entities", value=5, minimum=1, maximum=10, step=1)
@@ -603,13 +605,13 @@ max_knowledge_sequence = gr.Slider(label="Max Knowledge Sequence", value=30, min
 texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules (rules, train, compose)", value="rules")
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
 textbox_Content = gr.Textbox(lines=10, label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
-
+textbox_Content_Empty = gr.Textbox(lines=10)
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules, 
-                                                    textbox_Content,                                                    
+                                                    textbox_Content_Empty,                                                    
                                                     "file",
                                                     max_entities,
                                                     max_synonyms,
@@ -624,8 +626,7 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules,
-                                                    textbox_Content,                                                    
-                                                    "file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+                                                    textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
 app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 
