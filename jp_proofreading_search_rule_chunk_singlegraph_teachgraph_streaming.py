@@ -464,9 +464,19 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
         yield partial_message
     DebugLlama()
 
-
-def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):
+def proof_read_addin(Content: str = ""):
+    response = proof_read("rules", systemMessage.content, Content)
+    partial_message = ""
+    for text in response:
+       yield text
     
+
+def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None ):
+    if request:
+        print("Request headers dictionary:", request.headers)
+        print("IP address:", request.client.host)
+        print("Query parameters:", dict(request.query_params))
+
     begin = time.time()
 
     token_counter.reset_counts()
@@ -475,7 +485,7 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
         QueryRules = systemMessage.content
 
     if str(Graph).strip() == "":
-        Graph = "compose"
+        Graph = "rules"
 
     
     # Get the current time
@@ -558,36 +568,7 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
     return str(response)
 
 
-js = """
-function createGradioAnimation() {
-    var container = document.createElement('div');
-    container.id = 'gradio-animation';
-    container.style.fontSize = '2em';
-    container.style.fontWeight = 'bold';
-    container.style.textAlign = 'center';
-    container.style.marginBottom = '20px';
-
-    var text = 'Proofreading by Azure OpenAI GPT-4 Turbo';
-    for (var i = 0; i < text.length; i++) {
-        (function(i){
-            setTimeout(function(){
-                var letter = document.createElement('span');
-                letter.style.opacity = '0';
-                letter.style.transition = 'opacity 0.2s';
-                letter.innerText = text[i];
-                container.appendChild(letter);
-                setTimeout(function() {
-                    letter.style.opacity = '1';
-                }, 50);
-            }, i * 50);
-        })(i);
-    }
-var gradioContainer = document.querySelector('.gradio-container');
-    gradioContainer.insertBefore(container, gradioContainer.firstChild);
-
-    return 'Animation created';
-}
-"""
+js = "custom.js"
 
 app = FastAPI()
 @app.get("/",response_class=HTMLResponse)
@@ -604,7 +585,7 @@ max_knowledge_sequence = gr.Slider(label="Max Knowledge Sequence", value=30, min
 
 texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules (rules, train, compose)", value="rules")
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
-textbox_Content = gr.Textbox(lines=10, label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
+textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
 textbox_Content_Empty = gr.Textbox(lines=10)
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
@@ -628,6 +609,16 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
                                                     textbox_QueryRules,
                                                     textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
+
+
 app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 
-#custom_theme.launch()
+with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    button = gr.Button("Choose Selected Content",elem_id="ChooseSelectedContent")
+    interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+
+
+app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
+
+#custom_theme_addin.launch()

@@ -9,6 +9,11 @@
                 flex-direction: column;
                 font-family: 'Open Sans', sans-serif;
             }
+            #main {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
             .tab { 
                 display: none; 
                 width: 100%;
@@ -49,6 +54,30 @@
                 display: flex;
             }
         </style>
+        <script type="module">
+            import { registerMgtComponents, Providers, Msal2Provider } from 'https://unpkg.com/@microsoft/mgt@4';
+            
+            Providers.globalProvider = new Msal2Provider({clientId: '056c910f-8864-4338-99b0-b7583ebe8428', authority:'https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47'});
+            registerMgtComponents();
+            var accessToken = null;
+            
+            const loadAProofreadSection = () => {
+            Providers.globalProvider.getAccessToken().then(token => {
+                    accessToken = token;
+                    console.log(token);
+                
+         
+                if(accessToken == null) {
+                    console.log("Not signed in");
+                }
+                else
+                    document.getElementById("main").style.display = "block";
+             
+                });
+            }
+            Providers.onProviderUpdated(loadAProofreadSection);
+          </script>
+        
         <script>
             function openTab(tabId) {
                 var i, tab, button;
@@ -65,17 +94,20 @@
             }
         </script>
     </head>
-    <body>
+    <body >
         <h1>Welcome to the Proofreading Service</h1>
-        <div class="button-container">
-            <button class="tab-button active" onclick="openTab('proofread')">Proofread</button>
-            <button class="tab-button" onclick="openTab('advproofread')">Advanced Proofread</button>
-        </div>
-        <div id="proofread" class="tab active">
-            <iframe src="/proofread/"></iframe>
-        </div>
-        <div id="advproofread" class="tab">
-            <iframe src="/advproofread/"></iframe>
+        <!--mgt-login></mgt-login-->
+        <div id="main">
+            <div class="button-container">
+                <button class="tab-button active" onclick="openTab('proofread')">Proofread</button>
+                <button class="tab-button" onclick="openTab('advproofread')">Advanced Proofread</button>
+            </div>
+            <div id="proofread" class="tab active">
+                <iframe src="/proofread/"></iframe>
+            </div>
+            <div id="advproofread" class="tab">
+                <iframe src="/advproofread/"></iframe>
+            </div>
         </div>
     </body>
 </html>
