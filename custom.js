@@ -26,14 +26,16 @@ function createGradioAnimation() {
     });
 
     var button = document.querySelector("#ChooseSelectedContent");
-    button.addEventListener("click", function () {
-        var message = "Choose selected content button was clicked!";
-        // Send `message` to the parent using the postMessage method on the window.parent reference.
-        window.parent.postMessage(message, "*");
 
-        console.log("Choose selected content button was clicked from gradio");
-    });
+    if (button){
+        button.addEventListener("click", function () {
+            var message = "Choose selected content button was clicked!";
+            // Send `message` to the parent using the postMessage method on the window.parent reference.
+            window.parent.postMessage(message, "*");
 
+            console.log("Choose selected content button was clicked from gradio");
+        });
+    }
     
     var container = document.createElement('div');
     container.id = 'gradio-animation';
