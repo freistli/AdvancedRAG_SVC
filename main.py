@@ -43,6 +43,7 @@ from llama_index.core.callbacks import LlamaDebugHandler
 import tiktoken
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
 
+
 optimizer = SentenceEmbeddingOptimizer(
     percentile_cutoff=0.5,
     threshold_cutoff=0.7,
@@ -85,7 +86,10 @@ rules_index = None
 composeGraph = None
 graph_store = None
 query_engine = None
+rulesPath_query_engine = None
+rulesPath_index = None
 current_fine_Tune = None
+current_graph_path = None
 
 
 class FineTune:
@@ -107,13 +111,12 @@ load_dotenv('.env_4_SC')
 endpoint = os.environ['DOC_AI_BASE']
 key = os.environ['DOC_AI_KEY']
 
-q = SimpleQueue()
 #langchain_openai
 client = AzureChatOpenAI(
     openai_api_version="2024-02-15-preview",
     azure_deployment=os.environ['AZURE_OPENAI_Deployment'],
     streaming=True,
-    callbacks=[StreamingGradioCallbackHandler(q)]
+    callbacks=[StreamingGradioCallbackHandler()]
 )
 
 llama_index_llm = AzureChatOpenAI(azure_deployment=os.environ['AZURE_OPENAI_Deployment'],
@@ -313,11 +316,14 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
     global composeGraph
     global graph_store
     global query_engine
+    global rulesPath_query_engine
+    global rulesPath_index
     global current_fine_Tune
+    global current_graph_path
 
     rules_storage_dir=".//rules//storage"+"/"+Path(ruleFilePath).stem
     train_storage_dir=".//rules//storage"+"/"+Path(trainFilePath).stem
-
+  
     if Graph == "compose": 
         logging.info("compose")
         if composeGraph is None:
@@ -352,15 +358,14 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
         response_stream = composeGraph.as_query_engine(streaming=True,verbose=True,max_entities=10,
             graph_traversal_depth=3, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
 
-    if Graph == "rules":
+    elif Graph == "rules":
         logging.info("rules")
         #if rules_index is None:
         if query_engine is None:
                 if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
                     #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
 
-                    if graph_store is None:
-                        graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)                    
+                    graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)                    
                     storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
                     rules_index = load_index_from_storage(storage_context)
 
@@ -408,9 +413,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
 
         DebugLlama()
         
-        
-    
-    if Graph == "train":
+    elif Graph == "train":
         logging.info("train")
         if train_index is None:
                 if os.path.exists(train_storage_dir+"/docstore.json") and use_storage:
@@ -419,6 +422,39 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                     train_index = load_index_from_storage(train_storage_context)
         response_stream = train_index.as_query_engine(streaming=True,graph_traversal_depth=3, verbose=True).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
     
+    else:
+        logging.info(Graph)
+        if current_graph_path is None or current_graph_path != Graph:
+             rules_storage_dir = Graph
+             if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
+                    #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
+                graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)          
+                storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
+                rulesPath_index = load_index_from_storage(storage_context)
+
+                storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
+                
+                temp_retriever = rulesPath_index.as_retriever(
+                    #entity_extract_template="",
+                    #synonym_expand_template="",
+                    graph_traversal_depth=fine_tune.graph_traversal_depth,
+                    max_entities=fine_tune.max_entities,
+                    max_synonyms=fine_tune.max_synonyms,
+                    max_knowledge_sequence=fine_tune.max_knowledge_sequence,
+                    verbose=True )
+
+                rulesPath_query_engine = RetrieverQueryEngine.from_args(
+                    #graph_rag_retriever,
+                    temp_retriever,
+                    streaming=True,
+                    verbose=True
+                )
+                current_graph_path = Graph
+
+        response_stream = rulesPath_query_engine.query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content) 
+
+        DebugLlama()
+
     partial_message = ""
     for text in response_stream.response_gen:
         partial_message = partial_message + text
@@ -539,6 +575,8 @@ def read_main():
         html_content = file.read()    
     return html_content
 
+
+
 def build_index(ruleFilePath):
     indexGenerator = IndexGenerator(ruleFilePath)
  
@@ -546,9 +584,11 @@ def build_index(ruleFilePath):
     producer.start()    
     results  = indexGenerator.ReportRunningStatus()    
     for status in results:
-        yield status
+        yield status, indexGenerator.zipFile
 
     producer.join()
+
+
    
  
 
@@ -561,6 +601,9 @@ texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules 
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
 textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
 textbox_Content_Empty = gr.Textbox(lines=10)
+
+downloadbutton = gr.DownloadButton(label="Download Index")
+
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
@@ -597,10 +640,10 @@ app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_index:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+    interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown",downloadbutton],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_index, path="/buildragindex")
 
 
-custom_theme_index.launch()
+#custom_theme_base.launch()

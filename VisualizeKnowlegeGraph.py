@@ -41,7 +41,7 @@ logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()
 #ruleFilePath = ".//rules//KGSample.docx"
-ruleFilePath = ".//rules//rules_original.pdf"
+ruleFilePath = ".//rules//rules_short_2.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
 
