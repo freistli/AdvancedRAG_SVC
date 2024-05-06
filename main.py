@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import sys
 import time
-
+from IPython.display import display, HTML
 from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse, RedirectResponse
 from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
@@ -42,7 +42,8 @@ from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from llama_index.core.callbacks import LlamaDebugHandler
 import tiktoken
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
-
+import networkx as nx
+from pyvis.network import Network
 
 optimizer = SentenceEmbeddingOptimizer(
     percentile_cutoff=0.5,
@@ -589,7 +590,24 @@ def build_index(ruleFilePath):
     producer.join()
 
 
-   
+def view_graph(persist_dir):
+    if os.path.exists(persist_dir+"/docstore.json"):
+        storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
+        rules_index = load_index_from_storage(storage_context)
+        status = "Loaded rules index from storage"
+        logging.info(status)
+        yield status, "NotReady"
+        g = rules_index.get_networkx_graph()
+        net = Network(notebook=True, cdn_resources="in_line")
+        net.from_nx(g)
+        filename = Path(persist_dir).stem+"_graph.html"
+        filePath = tmpdirname + "/" + filename
+        net.save_graph(filePath)     
+        status = "Graph view created: "+filePath
+        logging.info(status)
+        yield status, filePath    
+    else:
+        return "No graph found","NotReady"
  
 
 max_entities = gr.Slider(label="Max Entities", value=5, minimum=1, maximum=10, step=1)
@@ -603,6 +621,7 @@ textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Conten
 textbox_Content_Empty = gr.Textbox(lines=10)
 
 downloadbutton = gr.DownloadButton(label="Download Index")
+downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
 
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
@@ -645,5 +664,12 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
 
 app = gr.mount_gradio_app(app, custom_theme_index, path="/buildragindex")
 
+with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_viewgraph:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=view_graph, inputs=["text"], outputs=["markdown",downloadgraphbutton],allow_flagging="never",analytics_enabled=False)
 
-#custom_theme_base.launch()
+
+app = gr.mount_gradio_app(app, custom_theme_viewgraph, path="/viewgraph")
+
+
+#custom_theme_viewgraph.launch()
