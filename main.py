@@ -520,8 +520,8 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
         to_be_proofread_content_list = textSplitter.split_text(docs_string)        
 
     fine_tune = FineTune(max_entities, max_synonyms,graph_traversal_depth,max_knowledge_sequence)
-    
-    with open(os.path.join(persist_dir, filename + '_proofread_result.md'), 'a') as f:
+    proofreadResultFilePath = os.path.join(persist_dir+"/"+filename + '_proofread_result.md')
+    with open(proofreadResultFilePath, 'a') as f:
         for i in range(len(to_be_proofread_content_list)):             
             status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
             try:                        
@@ -532,17 +532,19 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
                 for text in response:
                     status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
                     currentProofRead = status + "\n\n" + text 
-                    yield currentProofRead
+                    yield currentProofRead, proofreadResultFilePath
                 partial_message = currentProofRead
                 f.write(partial_message)
                 f.flush()
+                yield currentProofRead, proofreadResultFilePath
+
                 logging.info(partial_message)
             except Exception as e:
                 logging.error("Error: " + str(e))
                 f.write(status)
                 f.write("Error: " + str(e))
                 f.flush()
-                yield "Error: " + str(e)
+                yield "Error: " + str(e),proofreadResultFilePath
                 continue
 
     print(
@@ -564,7 +566,7 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
 
     logging.info("Time elapsed: " + str(end - begin) + " seconds")
 
-    return str(response)
+    return str(response),proofreadResultFilePath
 
 
 js = "custom.js"
@@ -622,6 +624,7 @@ textbox_Content_Empty = gr.Textbox(lines=10)
 
 downloadbutton = gr.DownloadButton(label="Download Index")
 downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
+downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
 
 
 with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
@@ -634,7 +637,7 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
                                                     max_synonyms,
                                                     graph_traversal_depth,
                                                     max_knowledge_sequence,
-                                                    ], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+                                                    ], outputs=["markdown",downloadproofreadbutton],allow_flagging="never",analytics_enabled=False)
 
 app = gr.mount_gradio_app(app, custom_theme, path="/advproofread")
 
@@ -643,7 +646,7 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules,
-                                                    textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+                                                    textbox_Content], outputs=["markdown",downloadproofreadbutton],allow_flagging="never",analytics_enabled=False)
 
 
 
