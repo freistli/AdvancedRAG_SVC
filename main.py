@@ -148,126 +148,7 @@ use_storage = True
 batch_size = 10
 
 
-def GenerateKGIndex(ruleFilePath, persist_dir, graph_store, use_storage, batch_size):
-    # Check if the index is already created and stored in the persist directory
-    if os.path.exists(persist_dir+"/docstore.json") and use_storage:
-        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-        rules_index = load_index_from_storage(storage_context)
-    else:  
-        layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
 
-        # Load the document and analyze the layout from online service
-        if not os.path.exists(layoutJson):
-            with open(ruleFilePath, 'rb') as file:
-                file_content = file.read()
-
-            layoutDocs = docClient.begin_analyze_document(
-                "prebuilt-layout",
-                analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                output_content_format="markdown"
-            )        
-            docs_string = layoutDocs.result().content
-            with open(layoutJson, 'w') as json_file:
-                json.dump(layoutDocs.result().content, json_file)
-
-        # Load the document and analyze the layout from local file
-        else:
-            with open(layoutJson) as json_file:
-                docs_string = json.load(json_file)  
-
-        """
-        # Split the document into chunks base on markdown headers.
-        headers_to_split_on = [
-        ("\n", "Paragraph")
-        ]
-        #splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-        """
-
-        splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
-        rules_content_list = splitter.split_text(docs_string)  
-        #chunk the original content
-        #splits = text_splitter.split_text(docs_string)
-        print(rules_content_list)
-
-        docs = []
-
-        for i in range(len(rules_content_list)):
-            doc = Document(text=rules_content_list[i],id_=str(i))
-            docs.append(doc)
-        
-        if os.path.exists(persist_dir+"/docstore.json"):
-            storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-        else:
-            storage_context = StorageContext.from_defaults(graph_store=graph_store)
-        
-        # Create the index from the documents
-        nodes = Settings.node_parser.get_nodes_from_documents(docs)
-
-        rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
-                                        max_triplets_per_chunk=3,
-                        storage_context=storage_context,
-                        include_embeddings=True,
-                        show_progress=True,
-                        #index_id="rules_index")
-                        index_id="train_index")
-        
-        startFrom = 10
-
-        for i in range(startFrom, len(nodes), batch_size):
-            logging.warning(f"Processing batch {i} to {i+batch_size}, total {len(nodes)} nodes")
-            
-            batch_nodes = nodes[i:i+batch_size]
-
-            logging.info(str(batch_nodes))
-
-            max_retries = 5
-            attempts = 0
-            success = False
-
-            while attempts < max_retries and not success:
-                try:
-                    rules_index.insert_nodes(nodes=batch_nodes)                
-                    success = True
-                except Exception as e:
-                    attempts += 1
-                    logging.error(f"Failed to create index, retrying {attempts} of {max_retries}")
-                    logging.error(str(e))
-
-            logging.warning(f"Persisting batch {i} to {i+batch_size}, total {len(nodes)} nodes")
-            rules_index.storage_context.persist(persist_dir=persist_dir)
-        
-        rules_index.storage_context.persist(persist_dir=persist_dir)
-        storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
-        rules_index = load_index_from_storage(storage_context)
-        return rules_index
-
-    """
-    rules_index = KnowledgeGraphIndex.from_documents( documents=docs,
-                                        max_triplets_per_chunk=3,
-                                        storage_context=storage_context,
-                                        include_embeddings=True)
-    rules_index.storage_context.persist(persist_dir=persist_dir)
-    """
-    """
-    storage_context = StorageContext.from_defaults()
-    rules_index = VectorStoreIndex.from_documents(documents=docs, storage_context=storage_context)
-    rules_index.storage_context.persist(persist_dir=persist_dir)
-    """
-
-"""
-loader = AzureAIDocumentIntelligenceLoader(file_path="C:\\Users\\freistli\\OneDrive - Microsoft\\Copilot\\Draft.docx", api_key=key, api_endpoint=endpoint,
-                                           api_model="prebuilt-layout")
-docs = loader.load()
-
-docs_string = docs[0].page_content
-
-splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=512, chunk_overlap=128)
-to_be_proofread_content_list = splitter.split_text(docs_string)
-
-print(to_be_proofread_content_list)
-
-prompt="Based on the proof read rule:"+rules_content_list[0]+"\r\n"+"provide detailed correction on these paragraphs:\r\n"+to_be_proofread_content_list[0]
-""" 
 prompt = ""
 systemMessage = SystemMessage(
     content = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents.                Pay attention to some known issues:もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない, 優位性を意味する語.               Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
@@ -276,18 +157,7 @@ message = HumanMessage(
     content=prompt
 )
 
-"""
-thread = Thread(target=client.invoke, kwargs={"input": [systemMessage,message]})
-thread.start()
-result = ""
-while True:
-    next_token = q.get(block=True)  # Blocks until an input is available
-    if next_token is job_done:
-        break
-    result += next_token
-    print(result,end='\r',flush=True)
-thread.join()
-"""
+
 
 import gradio as gr
 def stream_predict(message, history):
@@ -375,19 +245,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
             print("Fine Tune changed")
 
             storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
-            '''
-            graph_rag_retriever = KnowledgeGraphRAGRetriever(
-                storage_context=storage_context,
-                llm=Settings.llm,
-                #entity_extract_template="",
-                #synonym_expand_template="",
-                graph_traversal_depth=fine_tune.graph_traversal_depth,
-                max_entities=fine_tune.max_entities,
-                max_synonyms=fine_tune.max_synonyms,
-                max_knowledge_sequence=fine_tune.max_knowledge_sequence,
-                verbose=True          
-            )
-            '''
+           
 
             temp_retriever = rules_index.as_retriever(
                 #entity_extract_template="",
@@ -464,13 +322,12 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
     DebugLlama()
 
 def proof_read_addin(Content: str = ""):
-    response = proof_read("rules", systemMessage.content, Content)
-    partial_message = ""
-    for text in response:
+    result = proof_read("rules", systemMessage.content, Content, "", 5, 5, 2, 30, None, True)
+    for text in result:
        yield text
     
 
-def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None ):
+def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None , addin: bool = False):
     if request:
         print("Request headers dictionary:", request.headers)
         print("IP address:", request.client.host)
@@ -521,6 +378,7 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
 
     fine_tune = FineTune(max_entities, max_synonyms,graph_traversal_depth,max_knowledge_sequence)
     proofreadResultFilePath = os.path.join(persist_dir+"/"+filename + '_proofread_result.md')
+    currentProofRead = ""
     with open(proofreadResultFilePath, 'a') as f:
         for i in range(len(to_be_proofread_content_list)):             
             status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
@@ -528,15 +386,21 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
                 logging.info(status)
                 logging.info("processing content: " + to_be_proofread_content_list[i])
                 response = compose_query(Graph, QueryRules, to_be_proofread_content_list[i],fine_tune)
-                currentProofRead = ""
+                
                 for text in response:
                     status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
                     currentProofRead = status + "\n\n" + text 
-                    yield currentProofRead, proofreadResultFilePath
+                    if addin:
+                        yield currentProofRead
+                    else:
+                        yield currentProofRead, proofreadResultFilePath
                 partial_message = currentProofRead
                 f.write(partial_message)
                 f.flush()
-                yield currentProofRead, proofreadResultFilePath
+                if addin:
+                        yield currentProofRead
+                else:
+                        yield currentProofRead, proofreadResultFilePath
 
                 logging.info(partial_message)
             except Exception as e:
@@ -544,7 +408,10 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
                 f.write(status)
                 f.write("Error: " + str(e))
                 f.flush()
-                yield "Error: " + str(e),proofreadResultFilePath
+                if addin:
+                    yield "Error: " + str(e)
+                else:
+                    yield "Error: " + str(e),proofreadResultFilePath
                 continue
 
     print(
@@ -566,7 +433,10 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
 
     logging.info("Time elapsed: " + str(end - begin) + " seconds")
 
-    return str(response),proofreadResultFilePath
+    if addin:
+        yield currentProofRead
+    else:
+        yield currentProofRead,proofreadResultFilePath
 
 
 js = "custom.js"
@@ -627,7 +497,7 @@ downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
 downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
 
 
-with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
+with gr.Blocks(title="Advanced Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules, 
@@ -642,7 +512,7 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
 app = gr.mount_gradio_app(app, custom_theme, path="/advproofread")
 
 
-with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
+with gr.Blocks(title="Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules,
@@ -652,7 +522,7 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
 
 app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 
-with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
+with gr.Blocks(title="Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     button = gr.Button("Choose Selected Content",elem_id="ChooseSelectedContent")
     interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
@@ -660,14 +530,14 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
 
 app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
 
-with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_index:
+with gr.Blocks(title="Build Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_index:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown",downloadbutton],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_index, path="/buildragindex")
 
-with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_viewgraph:
+with gr.Blocks(title="View Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_viewgraph:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=view_graph, inputs=["text"], outputs=["markdown",downloadgraphbutton],allow_flagging="never",analytics_enabled=False)
 
@@ -675,4 +545,4 @@ with gr.Blocks(title="Proofreading by AI",analytics_enabled=False, css="footer{d
 app = gr.mount_gradio_app(app, custom_theme_viewgraph, path="/viewgraph")
 
 
-#custom_theme_viewgraph.launch()
+#custom_theme_addin.launch()

@@ -44,7 +44,7 @@ function createGradioAnimation() {
     container.style.textAlign = 'center';
     container.style.marginBottom = '20px';
 
-    var text = 'Proofreading by Azure OpenAI GPT-4 Turbo';
+    var text = document.title;
     for (var i = 0; i < text.length; i++) {
         (function(i){
             setTimeout(function(){
