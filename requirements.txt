@@ -18,3 +18,5 @@ llama-index-llms-azure-openai
 llama-index-embeddings-langchain
 llama-index-llms-langchain
 pyvis
+llama-index-vector-stores-azureaisearch
+azure-search-documents
