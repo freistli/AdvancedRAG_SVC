@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 from langchain_text_splitters import MarkdownTextSplitter
 from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
 from llama_index.llms.azure_openai import AzureOpenAI
@@ -24,6 +25,10 @@ from llama_index.core import Document
 
 from llama_index.core.vector_stores.types import VectorStoreQueryMode
 from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
+from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
+from llama_index.core.callbacks import LlamaDebugHandler
+import tiktoken
 
 
 load_dotenv('.env_4_SC')
@@ -37,7 +42,7 @@ class AzureAISearchIndexGenerator:
         self.idPrefix = idPrefix
         self.aoai_api_key = os.environ['AZURE_OPENAI_API_KEY']  
         self.aoai_endpoint = os.environ['AZURE_OPENAI_ENDPOINT']
-        self.aoai_api_version = "2023-05-15"
+        self.aoai_api_version = os.environ['AZURE_OPENAI_API_VERSION']
         self.aoai_modeldeploy_name = os.environ['AZURE_OPENAI_Deployment']
 
         self.docai_endpoint = os.environ['DOC_AI_BASE']
@@ -59,7 +64,7 @@ class AzureAISearchIndexGenerator:
 
         self.search_service_api_key = os.environ['AZURE_SEARCH_API_KEY']
         self.search_service_endpoint = os.environ['AZURE_SEARCH_ENDPOINT']
-        self.search_service_api_version = "2023-11-01"
+        self.search_service_api_version = os.environ['AZURE_SEARCH_API_VERSION']
 
         self.index_name = indexName
 
@@ -86,6 +91,12 @@ class AzureAISearchIndexGenerator:
 
         Settings.llm = self.llm
         Settings.embed_model = self.embed_model
+        Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
+        self.llama_debug = LlamaDebugHandler(print_trace_on_end=True)
+        self.token_counter = TokenCountingHandler(
+            tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
+        )
+        Settings.callback_manager = CallbackManager([self.token_counter,self.llama_debug])
 
         self.tmpdirname = tempfile.gettempdir()
        
@@ -97,29 +108,58 @@ class AzureAISearchIndexGenerator:
     
 
     def LoadIndex(self):
-       
-        self.vector_store = AzureAISearchVectorStore(
-            search_or_index_client=self.searchClient,
-            filterable_metadata_field_keys=self.metadata_fields,
-            index_management=IndexManagement.VALIDATE_INDEX,
-            id_field_key="id",
-            chunk_field_key="Text",
-            embedding_field_key="Embedding",
-            embedding_dimensionality=1536,
-            metadata_string_field_key="metadata",
-            doc_id_field_key="doc_id",
-        )
-
-        self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-
-        self.index = VectorStoreIndex.from_documents(
-            [],
-            storage_context=self.storage_context,
-        )
+        try:
+            begin = time.time()
+            self.token_counter.reset_counts()
         
+            self.vector_store = AzureAISearchVectorStore(
+                search_or_index_client=self.searchClient,
+                filterable_metadata_field_keys=self.metadata_fields,
+                index_management=IndexManagement.VALIDATE_INDEX,
+                id_field_key="id",
+                chunk_field_key="Text",
+                embedding_field_key="Embedding",
+                embedding_dimensionality=1536,
+                metadata_string_field_key="metadata",
+                doc_id_field_key="doc_id",
+            )
+
+            self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+
+            self.index = VectorStoreIndex.from_documents(
+                [],
+                storage_context=self.storage_context,
+            )
+        except Exception as e:             
+            logging.error('Error loading index')
+            print(e)
+        finally:
+            end = time.time()
+            logging.info('Index loading took ' + str(end - begin) + ' seconds')
+            self.TokenCount()
+
+    
+    def TokenCount(self):
+        print(
+            "Embedding Tokens: ",
+            self.token_counter.total_embedding_token_count,
+            "\n",
+            "LLM Prompt Tokens: ",
+            self.token_counter.prompt_llm_token_count,
+            "\n",
+            "LLM Completion Tokens: ",
+            self.token_counter.completion_llm_token_count,
+            "\n",
+            "Total LLM Token Count: ",
+            self.token_counter.total_llm_token_count,
+            "\n",
+            )
 
     def GenerateIndex(self):
         try:
+            begin = time.time()
+            self.token_counter.reset_counts()
+            
             self.vector_store = AzureAISearchVectorStore(  
             search_or_index_client=self.index_client,  
             filterable_metadata_field_keys=self.metadata_fields,
@@ -159,7 +199,7 @@ class AzureAISearchIndexGenerator:
                     docs_string = json.load(json_file) 
                 logging.info('Layout analysis result loaded from ' + layoutJson)
 
-            splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
+            splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=512)
             content_list = splitter.split_text(docs_string)  
             
             logging.info('Number of chunks: ' + str(len(content_list)))
@@ -174,10 +214,16 @@ class AzureAISearchIndexGenerator:
             documents=self.docs,
             storage_context=self.storage_context)
 
-            self.index.storage_context.persist()
+            self.index.storage_context.persist()                       
 
         except Exception as e:
+            logging.error('Error generating index')
             print(e)
+        finally:
+            end = time.time()
+            logging.info('Indexing took ' + str(end - begin) + ' seconds')
+            self.TokenCount() 
+
 
     def TestSummary(self):
         self.query_engine = self.index.as_query_engine(self.llm,streaming=True)
@@ -188,26 +234,40 @@ class AzureAISearchIndexGenerator:
             print(partialMessage+"\n")
     
     def HybridSearch(self,query):
-        self.hybrid_retriever = self.index.as_retriever(
-            vector_store_query_mode=VectorStoreQueryMode.SEMANTIC_HYBRID
-        )
-        self.query_engine = RetrieverQueryEngine.from_args(
-                #graph_rag_retriever,
-                self.hybrid_retriever,
-                streaming=True,
-                verbose=True
-            )
+        try:
+            begin = time.time()
+            self.token_counter.reset_counts()
 
-        response_stream = self.query_engine.query(query)
-        partialMessage = ""
-        for text in response_stream.response_gen:
-            partialMessage += text
-            print(partialMessage+"\n")
+            self.hybrid_retriever = self.index.as_retriever(
+                vector_store_query_mode=VectorStoreQueryMode.SEMANTIC_HYBRID
+            )
+            self.query_engine = RetrieverQueryEngine.from_args(
+                    #graph_rag_retriever,
+                    self.hybrid_retriever,
+                    streaming=True,
+                    verbose=True
+                )
+            response_stream = self.query_engine.query(query)
+            partialMessage = ""
+            for text in response_stream.response_gen:
+                partialMessage += text
+                print(partialMessage+"\n")
+        except Exception as e:
+            logging.error('Error searching index')
+            print(e)
+        finally:
+            end = time.time()
+            logging.info('Search took ' + str(end - begin) + ' seconds')
+            self.TokenCount()
         
 
-    def TestSearch(self):
+def TestSearch():
         testPath1 = 'C:\\Users\\freistli\\Downloads\\Northwind_Standard_Benefits_Details.pdf'
-        azureaisearchIndexGenerator = AzureAISearchIndexGenerator(testPath1, "llamaindex_test2", Path(testPath1).stem)
-        azureaisearchIndexGenerator.GenerateIndex()
+        azureaisearchIndexGenerator = AzureAISearchIndexGenerator(testPath1, "llamaindex_test3", Path(testPath1).stem)
+        #azureaisearchIndexGenerator.GenerateIndex()
         azureaisearchIndexGenerator.LoadIndex()
         azureaisearchIndexGenerator.HybridSearch("summarize the doc")
+
+if __name__ == "__main__":
+    TestSearch()
+
