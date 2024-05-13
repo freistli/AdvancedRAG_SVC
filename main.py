@@ -1,3 +1,15 @@
+'''
+Functionality: 
+    1. Proofreading by Azure OpenAI GPT-4 Turbo
+    2. Build Knowledge Graph Index
+    3. View and Download Knowledge Graph Index
+    4. Advanced Proofreading by Azure OpenAI GPT-4 Turbo
+    5. Download Proofread Result
+    6. Choose Selected Content to upload
+Author: Freist Li
+Date: 2024-05
+Version: 1.0
+'''
 
 import base64
 from datetime import datetime

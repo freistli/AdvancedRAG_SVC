@@ -1,3 +1,11 @@
+'''
+Functionality: 
+Generate an index for a document using Azure AI services and Azure Search. The document is first analyzed for layout using Azure Document AI service. The layout is then used to split the document into chunks.
+The chunks are then indexed using Azure Search. The index is then used to search the document for a query.
+Author: Freist Li
+Date: 2024-05
+Version: 1.0
+'''
 import json
 import logging
 import os

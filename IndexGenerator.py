@@ -1,3 +1,11 @@
+'''
+Functionality:
+    1. Generate Knowledge Graph Index from content, such as proofreading rules
+    2. Report the running status of the index generation process
+Author: Freist Li
+Time: 2024-05
+Version: 1.0
+'''
 
 import base64
 from datetime import datetime
