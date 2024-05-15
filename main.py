@@ -54,6 +54,7 @@ from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from llama_index.core.callbacks import LlamaDebugHandler
 import tiktoken
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
+from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
 import networkx as nx
 from pyvis.network import Network
 
@@ -473,6 +474,12 @@ def build_index(ruleFilePath):
 
     producer.join()
 
+def build_azure_index(indexName, filePath):
+    azureAISearchIndexGenerator = AzureAISearchIndexGenerator(filePath, indexName, Path(filePath).stem)
+    result = azureAISearchIndexGenerator.GenerateIndex() 
+    for status in result:
+        yield status
+
 
 def view_graph(persist_dir):
     if os.path.exists(persist_dir+"/docstore.json"):
@@ -492,7 +499,33 @@ def view_graph(persist_dir):
         yield status, filePath    
     else:
         return "No graph found","NotReady"
+    
+def KnowledgeGraphIndexSearch(indexName, systemMessage, content):
+    result = proof_read(indexName, systemMessage, content, "", 5, 5, 2, 30, None, True)
+    for text in result:
+       yield text
  
+def chat_bot(message, history, indexType, indexName, systemMessage):
+    history_openai_format = []
+    history_openai_format.append({"role": "system", "content": systemMessage})
+    for human, assistant in history:
+            history_openai_format.append({"role": "user", "content": human })
+            history_openai_format.append({"role": "assistant", "content":assistant})
+    history_openai_format.append({"role": "user", "content": message})
+
+    if indexType == "Azure AI Search":
+        azureAISearchIndexGenerator = AzureAISearchIndexGenerator(docPath="", indexName=indexName, idPrefix="")
+        index = azureAISearchIndexGenerator.LoadIndex()
+        response = azureAISearchIndexGenerator.HybridSearch(str(history_openai_format))
+        for text in response:
+            yield text
+    elif indexType == "Knowledge Graph":
+        response = KnowledgeGraphIndexSearch(indexName, str(history_openai_format), message)
+        for text in response:
+            yield text
+       
+def print_like_dislike(x: gr.LikeData):
+    print(x.index, x.value, x.liked)
 
 max_entities = gr.Slider(label="Max Entities", value=5, minimum=1, maximum=10, step=1)
 max_synonyms = gr.Slider(label="Max Synonyms", value=5, minimum=1, maximum=10, step=1)
@@ -503,10 +536,13 @@ texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules 
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
 textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
 textbox_Content_Empty = gr.Textbox(lines=10)
+textbox_AzureSearchIndex =  gr.Textbox(lines=1, label="Azure AI Search Index Name", value="azuresearch_0")
 
 downloadbutton = gr.DownloadButton(label="Download Index")
 downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
 downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
+
+
 
 
 with gr.Blocks(title="Advanced Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
@@ -556,5 +592,39 @@ with gr.Blocks(title="View Knowledge Graph Index",analytics_enabled=False, css="
 
 app = gr.mount_gradio_app(app, custom_theme_viewgraph, path="/viewgraph")
 
+with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_AzureSearch:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=build_azure_index, inputs=[textbox_AzureSearchIndex,"file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
-#custom_theme_addin.launch()
+
+app = gr.mount_gradio_app(app, custom_theme_AzureSearch, path="/buildazureindex")
+
+
+chatbot = gr.Chatbot(likeable=True,
+                            show_share_button=True, 
+                            show_copy_button=True, 
+                            bubble_full_width = False,
+                            )
+
+
+with gr.Blocks(title="Chat with Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_ChatBot:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    with gr.Row():    
+        with gr.Column(scale=1):
+            with gr.Accordion("Chatbot Configuration", open=True):
+                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph"], label="Index Type", value="Azure AI Search")
+                textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
+                textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)
+
+        with gr.Column(scale=3): 
+            chatbot.like(print_like_dislike,None, None)                   
+            bot = gr.ChatInterface(chat_bot,
+                             chatbot=chatbot,
+                             additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage], 
+                             examples = [["provide summary for the document"],["give me insights of the document"]])    
+
+
+app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
+
+
+#custom_theme_ChatBot.launch()

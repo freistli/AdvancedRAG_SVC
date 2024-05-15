@@ -104,12 +104,17 @@
         <!--mgt-login></mgt-login-->
         <div id="main">
             <div class="button-container">
-                <button class="tab-button active" onclick="openTab('proofread')">Proofread</button>
+                <button class="tab-button active" onclick="openTab('advchatbot')">Chat Mode</button>
+                <button class="tab-button" onclick="openTab('proofread')">Proofread</button>
                 <button class="tab-button" onclick="openTab('advproofread')">Advanced Proofread</button>
                 <button class="tab-button" onclick="openTab('buildragindex')">Build Knowledge Graph Index</button>
                 <button class="tab-button" onclick="openTab('viewgraph')">View Knowledge Graph Index</button>
+                <button class="tab-button" onclick="openTab('buildazureindex')">Build Azure AI Search Index</button>
             </div>
-            <div id="proofread" class="tab active">
+            <div id="advchatbot" class="tab active">
+                <iframe src="/advchatbot/"></iframe>
+            </div>
+            <div id="proofread" class="tab">
                 <iframe src="/proofread/"></iframe>
             </div>
             <div id="advproofread" class="tab">
@@ -121,6 +126,10 @@
             <div id="viewgraph" class="tab">
                 <iframe src="/viewgraph/"></iframe>
             </div>
+            <div id="buildazureindex" class="tab">
+                <iframe src="/buildazureindex/"></iframe>
+            </div>
+            
         </div>
     </body>
 </html>

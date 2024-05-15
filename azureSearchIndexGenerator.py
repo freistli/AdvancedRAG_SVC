@@ -146,6 +146,21 @@ class AzureAISearchIndexGenerator:
             logging.info('Index loading took ' + str(end - begin) + ' seconds')
             self.TokenCount()
 
+    def ChunkTest(self,doc_id):
+        try:
+            items = self.searchClient.search(search_text="*",filter=f"doc_id eq '{doc_id}'", top=1,include_total_count=True,select="doc_id")
+            if items and items.get_count() > 0:
+                logging.info("Chunk exists: "+doc_id)
+                for item in items:
+                    logging.info(item)            
+                logging.info("Items Count: "+str(items.get_count()))
+                return True
+            else:
+                return False
+        except Exception as e:
+            logging.error('Error checking chunk')
+            print(e)
+            return False
     
     def TokenCount(self):
         print(
@@ -167,70 +182,88 @@ class AzureAISearchIndexGenerator:
         try:
             begin = time.time()
             self.token_counter.reset_counts()
+            partialMessage = ""
+            first_doc_id = self.idPrefix + "_0"
+
+            if self.ChunkTest(first_doc_id) == False:
             
-            self.vector_store = AzureAISearchVectorStore(  
-            search_or_index_client=self.index_client,  
-            filterable_metadata_field_keys=self.metadata_fields,
-            index_name=self.index_name,  
-            index_management = IndexManagement.CREATE_IF_NOT_EXISTS,  
-            id_field_key="id",  
-            chunk_field_key="Text",  
-            embedding_field_key="Embedding",  
-            metadata_string_field_key="metadata",
-            doc_id_field_key="doc_id",
-            embedding_dimensionality=1536,
-            language_analyzer="en.lucene",
-            vector_algorithm_type="exhaustiveKnn"
-            )
+                self.vector_store = AzureAISearchVectorStore(  
+                search_or_index_client=self.index_client,  
+                filterable_metadata_field_keys=self.metadata_fields,
+                index_name=self.index_name,  
+                index_management = IndexManagement.CREATE_IF_NOT_EXISTS,  
+                id_field_key="id",  
+                chunk_field_key="Text",  
+                embedding_field_key="Embedding",  
+                metadata_string_field_key="metadata",
+                doc_id_field_key="doc_id",
+                embedding_dimensionality=1536,
+                language_analyzer="en.lucene",
+                vector_algorithm_type="exhaustiveKnn"
+                )
 
-            self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+                self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
-            layoutJson = self.persist_dir + "/"+Path(self.docPath).stem+".json"
-            # Load the document and analyze the layout from online service
-            if not os.path.exists(layoutJson):
-                with open(self.docPath, 'rb') as file:
-                    file_content = file.read()
+                layoutJson = self.persist_dir + "/"+Path(self.docPath).stem+".json"
+                # Load the document and analyze the layout from online service
+                if not os.path.exists(layoutJson):
+                    with open(self.docPath, 'rb') as file:
+                        file_content = file.read()
 
-                    layoutDocs = self.docClient.begin_analyze_document(
-                        "prebuilt-layout",
-                        analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                        output_content_format="markdown"
-                    )        
-                    docs_string = layoutDocs.result().content
-                    with open(layoutJson, 'w') as json_file:
-                        json.dump(layoutDocs.result().content, json_file)
-                    logging.info('Layout analysis result saved to ' + layoutJson)
+                        layoutDocs = self.docClient.begin_analyze_document(
+                            "prebuilt-layout",
+                            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                            output_content_format="markdown"
+                        )        
+                        docs_string = layoutDocs.result().content
+                        with open(layoutJson, 'w') as json_file:
+                            json.dump(layoutDocs.result().content, json_file)
+                        partialMessage += 'Layout analysis result saved to ' + layoutJson + "\n"
+                        logging.info(partialMessage)
+                        yield partialMessage
 
-                # Load the document and analyze the layout from local file
+                    # Load the document and analyze the layout from local file
+                else:
+                    with open(layoutJson) as json_file:
+                        docs_string = json.load(json_file) 
+                    partialMessage += 'Layout analysis result loaded from ' + layoutJson + "\n"
+                    logging.info(partialMessage)
+                    yield partialMessage
+
+                splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=512)
+                content_list = splitter.split_text(docs_string)  
+                
+                partialMessage += '\n\nNumber of chunks: ' + str(len(content_list)) + "\n"
+                logging.info(partialMessage)
+                yield partialMessage
+
+                self.docs = []
+
+                for i in range(len(content_list)):
+                    doc = Document(text=content_list[i],id_=self.idPrefix+"_"+str(i))
+                    self.docs.append(doc)
+
+                self.index = VectorStoreIndex.from_documents(
+                documents=self.docs,
+                storage_context=self.storage_context)
+
+                self.index.storage_context.persist()
             else:
-                with open(layoutJson) as json_file:
-                    docs_string = json.load(json_file) 
-                logging.info('Layout analysis result loaded from ' + layoutJson)
-
-            splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=512)
-            content_list = splitter.split_text(docs_string)  
-            
-            logging.info('Number of chunks: ' + str(len(content_list)))
-
-            self.docs = []
-
-            for i in range(len(content_list)):
-                doc = Document(text=content_list[i],id_=self.idPrefix+"_"+str(i))
-                self.docs.append(doc)
-
-            self.index = VectorStoreIndex.from_documents(
-            documents=self.docs,
-            storage_context=self.storage_context)
-
-            self.index.storage_context.persist()                       
+                partialMessage += f'The Document {first_doc_id} already exists in the index, skipping indexing'
+                logging.info(partialMessage)
+                yield partialMessage                       
 
         except Exception as e:
-            logging.error('Error generating index')
+            partialMessage += 'Error generating index'
+            logging.error(partialMessage)
             print(e)
+            yield partialMessage
         finally:
             end = time.time()
-            logging.info('Indexing took ' + str(end - begin) + ' seconds')
+            partialMessage += '\n\nIndexing took ' + str(end - begin) + ' seconds'
+            logging.info(partialMessage)
             self.TokenCount() 
+            yield partialMessage
 
 
     def TestSummary(self):
@@ -242,6 +275,7 @@ class AzureAISearchIndexGenerator:
             print(partialMessage+"\n")
     
     def HybridSearch(self,query):
+        partialMessage = ""
         try:
             begin = time.time()
             self.token_counter.reset_counts()
@@ -250,32 +284,37 @@ class AzureAISearchIndexGenerator:
                 vector_store_query_mode=VectorStoreQueryMode.SEMANTIC_HYBRID
             )
             self.query_engine = RetrieverQueryEngine.from_args(
-                    #graph_rag_retriever,
                     self.hybrid_retriever,
                     streaming=True,
                     verbose=True
                 )
             response_stream = self.query_engine.query(query)
-            partialMessage = ""
+            
             for text in response_stream.response_gen:
                 partialMessage += text
                 print(partialMessage+"\n")
+                yield partialMessage
         except Exception as e:
             logging.error('Error searching index')
-            print(e)
+            partialMessage  += '\n\n'+str(e)
+            print(e)            
         finally:
             end = time.time()
-            logging.info('Search took ' + str(end - begin) + ' seconds')
+            status = '\n\nResponse took ' + str(end - begin) + ' seconds'
+            logging.info(status)
             self.TokenCount()
+            yield partialMessage
         
 
 def TestSearch():
-        testPath1 = 'C:\\Users\\freistli\\Downloads\\Northwind_Standard_Benefits_Details.pdf'
-        azureaisearchIndexGenerator = AzureAISearchIndexGenerator(testPath1, "llamaindex_test3", Path(testPath1).stem)
-        #azureaisearchIndexGenerator.GenerateIndex()
+        testPath1 = 'rules_original.pdf'        
+        azureaisearchIndexGenerator = AzureAISearchIndexGenerator(testPath1, "llamaindex_0", Path(testPath1).stem)
+        for result in azureaisearchIndexGenerator.GenerateIndex():
+            print(result)
         azureaisearchIndexGenerator.LoadIndex()
-        azureaisearchIndexGenerator.HybridSearch("summarize the doc")
+        azureaisearchIndexGenerator.HybridSearch("Summarize the document")
 
 if __name__ == "__main__":
-    TestSearch()
+     TestSearch()
+        
 
