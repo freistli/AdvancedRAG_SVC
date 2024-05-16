@@ -20,3 +20,4 @@ llama-index-llms-langchain
 pyvis
 llama-index-vector-stores-azureaisearch
 azure-search-documents
+pypickle
