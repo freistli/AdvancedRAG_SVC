@@ -46,7 +46,7 @@ load_dotenv('.env_4_SC')
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
-class RecursiveRetriverIndexGenerator:
+class RecursiveRetrieverIndexGenerator:
     def __init__(self, docPath, indexName, idPrefix):
         self.docPath = docPath
         self.idPrefix = idPrefix
@@ -120,7 +120,11 @@ class RecursiveRetriverIndexGenerator:
 
         self.use_storage = True
 
+        self.all_nodes = None
+
         self.all_nodes_dict = None
+
+        self.index = None
     
 
     def LoadIndex(self):
@@ -129,8 +133,8 @@ class RecursiveRetriverIndexGenerator:
             begin = time.time()
             self.token_counter.reset_counts()        
             if os.path.exists(self.index_persist_dir+"/docstore.json"):
-                docstore = SimpleDocumentStore(self.index_persist_dir)
-                storage_context = StorageContext.from_defaults(docstore=docstore,persist_dir=self.index_persist_dir)
+                docstore = SimpleDocumentStore()
+                storage_context = StorageContext.from_defaults(persist_dir=self.index_persist_dir)
                 self.index = load_index_from_storage(storage_context)
                 partialMessage += '\n\nIndex loaded from storage:' + self.index_persist_dir
                 logging.info(partialMessage)                           
@@ -174,7 +178,7 @@ class RecursiveRetriverIndexGenerator:
             self.token_counter.reset_counts()            
             self.use_storage = use_storage
             if os.path.exists(self.index_persist_dir+"/docstore.json") and self.use_storage:
-                docstore = SimpleDocumentStore(self.index_persist_dir)
+                docstore = SimpleDocumentStore()
                 storage_context = StorageContext.from_defaults(docstore=docstore,persist_dir=self.index_persist_dir)
                 self.index = load_index_from_storage(storage_context)
                 partialMessage += '\n\nIndex loaded from storage:' + self.index_persist_dir
@@ -249,6 +253,11 @@ class RecursiveRetriverIndexGenerator:
                     all_nodes.append(original_node)
 
                 all_nodes_dict = {n.node_id: n for n in all_nodes}
+
+                # Persist all_nodes using Pickle
+                pickle_file_path = self.index_persist_dir + "/all_nodes.pickle"
+                with open(pickle_file_path, 'wb') as pickle_file:
+                    pickle.dump(all_nodes, pickle_file)
                 
                 # Persist all_nodes_dict using Pickle
                 pickle_file_path = self.index_persist_dir + "/all_nodes_dict.pickle"
@@ -258,9 +267,13 @@ class RecursiveRetriverIndexGenerator:
                 partialMessage += '\n\nall_nodes_dict saved to ' + pickle_file_path
                 logging.info(partialMessage)
                 
-
                 partialMessage += '\n\nGenerating index'
-                index = VectorStoreIndex(all_nodes, embed_model=self.embed_model)
+                docstore = SimpleDocumentStore()
+                if os.path.exists(self.index_persist_dir+"/docstore.json"):
+                    storage_context = StorageContext.from_defaults(docstore=docstore,persist_dir=self.index_persist_dir)
+                else:
+                    storage_context = StorageContext.from_defaults(docstore=docstore)            
+                index = VectorStoreIndex(all_nodes, embed_model=self.embed_model,storage_context=storage_context)
                 index.storage_context.persist(persist_dir=self.index_persist_dir) 
                 partialMessage += '\n\nIndex saved to the folder ' + self.index_persist_dir
                 logging.info(partialMessage)
@@ -294,18 +307,27 @@ class RecursiveRetriverIndexGenerator:
             partialMessage += text
             print(partialMessage+"\n")
     
-    def RecursiveRetriverSearch(self,query):
+    def RecursiveRetrieverSearch(self,query):
         partialMessage = ""
         try:
             begin = time.time()
             self.token_counter.reset_counts()
 
-            vector_retriever_chunk = self.index.as_retriever(similarity_top_k=2)
+            if self.index is None:
+                if self.all_nodes is None:
+                    pickle_file_path = self.index_persist_dir + "/all_nodes.pickle"
+                    with open(pickle_file_path, 'rb') as pickle_file:
+                        self.all_nodes = pickle.load(pickle_file)
+                logging.info('all_nodes loaded from ' + pickle_file_path)
+                self.index = VectorStoreIndex(self.all_nodes, embed_model=self.embed_model)          
 
             if self.all_nodes_dict is None:
                 pickle_file_path = self.index_persist_dir + "/all_nodes_dict.pickle"
                 with open(pickle_file_path, 'rb') as pickle_file:
                     self.all_nodes_dict = pickle.load(pickle_file)
+                logging.info('all_nodes_dict loaded from ' + pickle_file_path)           
+            
+            vector_retriever_chunk = self.index.as_retriever(similarity_top_k=2)
 
             retriever_chunk = RecursiveRetriever(
             "vector",
@@ -321,7 +343,7 @@ class RecursiveRetriverIndexGenerator:
                 logging.info(node.node_id+':\n\n')
                 logging.info(node.text)
 
-            '''
+            
             self.query_engine = RetrieverQueryEngine.from_args(retriever_chunk, llm=self.llm, streaming=True)
 
             response_stream = self.query_engine.query(query)
@@ -330,7 +352,7 @@ class RecursiveRetriverIndexGenerator:
                 partialMessage += text
                 logging.info(partialMessage+"\n")
                 yield partialMessage
-            '''
+            
 
         except Exception as e:
             logging.error('Error searching index')
@@ -346,7 +368,7 @@ class RecursiveRetriverIndexGenerator:
 
 def TestGenerateIndex():
         testPath = ".\\rules\\rules_original.pdf"
-        recursiveRetrieverIndexGenerator = RecursiveRetriverIndexGenerator(testPath, "","")
+        recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator(testPath, "","")
         logging.info('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
         result= recursiveRetrieverIndexGenerator.GenerateOrLoadIndex(use_storage=False)
         for text,zip in result:
@@ -357,16 +379,18 @@ def TestGenerateIndex():
             pass
 
 def TestIndex():
+        systemMessage = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents. Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
+        proofReadContent = "\n\n" + "今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています"
         testPath = ".\\rules\\rules_original.pdf"
-        recursiveRetrieverIndexGenerator = RecursiveRetriverIndexGenerator(testPath, "","")
+        recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator(testPath, "","")
         logging.info('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
         result = recursiveRetrieverIndexGenerator.LoadIndex()
         for text in result:
-            pass
-        logging.info('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        result = recursiveRetrieverIndexGenerator.RecursiveRetriverSearch("Give a summary of the document")
+            print(text)
+
+        result = recursiveRetrieverIndexGenerator.RecursiveRetrieverSearch(systemMessage + proofReadContent)
         for text in result:
-            pass
+            print(text)
     
 
 if __name__ == "__main__":

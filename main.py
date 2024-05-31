@@ -1,9 +1,9 @@
 '''
 Functionality: 
-    1. Proofreading by Azure OpenAI GPT-4 Turbo
+    1. Proofreading by Azure OpenAI LLM
     2. Build Knowledge Graph Index
     3. View and Download Knowledge Graph Index
-    4. Advanced Proofreading by Azure OpenAI GPT-4 Turbo
+    4. Advanced Proofreading by Azure OpenAI LLM
     5. Download Proofread Result
     6. Choose Selected Content to upload
 Author: Freist Li
@@ -55,6 +55,7 @@ from llama_index.core.callbacks import LlamaDebugHandler
 import tiktoken
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
 from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
+from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
 import networkx as nx
 from pyvis.network import Network
 
@@ -104,6 +105,7 @@ rulesPath_query_engine = None
 rulesPath_index = None
 current_fine_Tune = None
 current_graph_path = None
+proofread_chunk = 500
 
 
 class FineTune:
@@ -193,7 +195,7 @@ def DebugLlama():
         print("Error")
     llama_debug.flush_event_logs()
 
-def compose_query(Graph, QueryRules, content, fine_tune=None):
+def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix="以下の文章を校正してください: "):
 
     global rules_index
     global train_index
@@ -240,7 +242,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                     include_embeddings=True)
         
         response_stream = composeGraph.as_query_engine(streaming=True,verbose=True,max_entities=10,
-            graph_traversal_depth=3, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
+            graph_traversal_depth=3, similarity_top_k=5).query(QueryRules + f"\r\n {content_prefix}  \r\n "+content)
 
     elif Graph == "rules":
         logging.info("rules")
@@ -281,7 +283,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                 
 
         #response_stream = rules_index.as_query_engine(streaming=True,optimizer=optimizer,storage_context=storage_context,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
-        response_stream = query_engine.query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content) 
+        response_stream = query_engine.query(QueryRules + f"\r\n {content_prefix}  \r\n "+content) 
 
         DebugLlama()
         
@@ -323,7 +325,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None):
                 )
                 current_graph_path = Graph
 
-        response_stream = rulesPath_query_engine.query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content) 
+        response_stream = rulesPath_query_engine.query(QueryRules + f"\r\n {content_prefix}  \r\n "+content) 
 
         DebugLlama()
 
@@ -340,7 +342,7 @@ def proof_read_addin(Content: str = ""):
        yield text
     
 
-def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None , addin: bool = False):
+def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None , addin: bool = False, content_prefix="以下の文章を校正してください: "):
     if request:
         print("Request headers dictionary:", request.headers)
         print("IP address:", request.client.host)
@@ -368,9 +370,11 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
     if str(Content).strip() != "":
         logging.info(Content)
 
-        textSplitter = CharacterTextSplitter(chunk_size=350, separator="\n", is_separator_regex=False)
+        #textSplitter = CharacterTextSplitter(chunk_size=350, separator="\n", is_separator_regex=False)
+        #to_be_proofread_content_list = textSplitter.split_text(Content)
 
-        to_be_proofread_content_list = textSplitter.split_text(Content)
+        textSplitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size = proofread_chunk)
+        to_be_proofread_content_list = textSplitter.split_text(Content)  
         
     elif str(Draft).strip() != "":
         print(Draft)
@@ -385,9 +389,11 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
 
         docs_string = to_be_proofread_content.result().content
 
-        textSplitter = CharacterTextSplitter(chunk_size=350, separator="\n", is_separator_regex=False)
+        #textSplitter = CharacterTextSplitter(chunk_size=350, separator="\n", is_separator_regex=False)
+        #to_be_proofread_content_list = textSplitter.split_text(docs_string)        
 
-        to_be_proofread_content_list = textSplitter.split_text(docs_string)        
+        textSplitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size = proofread_chunk)
+        to_be_proofread_content_list = textSplitter.split_text(docs_string)  
 
     fine_tune = FineTune(max_entities, max_synonyms,graph_traversal_depth,max_knowledge_sequence)
     proofreadResultFilePath = os.path.join(persist_dir+"/"+filename + '_proofread_result.md')
@@ -398,7 +404,7 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
             try:                        
                 logging.info(status)
                 logging.info("processing content: " + to_be_proofread_content_list[i])
-                response = compose_query(Graph, QueryRules, to_be_proofread_content_list[i],fine_tune)
+                response = compose_query(Graph, QueryRules, to_be_proofread_content_list[i],fine_tune,content_prefix)
                 
                 for text in response:
                     status = "\n\nTime elapsed: " +str(time.time() - begin)+ "\n\nPart: "+str(i+1) + " of " + str(len(to_be_proofread_content_list))+" :"
@@ -480,6 +486,12 @@ def build_azure_index(indexName, filePath):
     for status in result:
         yield status
 
+def build_RecursiveRetriever_index(filePath):
+    recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (filePath, "RR_"+Path(filePath).stem,"")
+    result = recursiveRetrieverIndexGenerator.GenerateOrLoadIndex()
+    for msg, zipfile in result:
+        yield msg, zipfile
+
 
 def view_graph(persist_dir):
     if os.path.exists(persist_dir+"/docstore.json"):
@@ -501,7 +513,7 @@ def view_graph(persist_dir):
         return "No graph found","NotReady"
     
 def KnowledgeGraphIndexSearch(indexName, systemMessage, content):
-    result = proof_read(indexName, systemMessage, content, "", 5, 5, 2, 30, None, True)
+    result = proof_read(indexName, systemMessage, content, "", 5, 5, 2, 30, None, True, "Please help to answer: ")
     for text in result:
        yield text
  
@@ -541,11 +553,11 @@ textbox_AzureSearchIndex =  gr.Textbox(lines=1, label="Azure AI Search Index Nam
 downloadbutton = gr.DownloadButton(label="Download Index")
 downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
 downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
+downloadRRbutton = gr.DownloadButton(label="Download Index")
 
+modelName = "Azure OpenAI GPT-4o"
 
-
-
-with gr.Blocks(title="Advanced Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
+with gr.Blocks(title=f"Advanced Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules, 
@@ -560,7 +572,7 @@ with gr.Blocks(title="Advanced Proofreading by Azure OpenAI GPT-4 Turbo",analyti
 app = gr.mount_gradio_app(app, custom_theme, path="/advproofread")
 
 
-with gr.Blocks(title="Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
+with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules,
@@ -570,7 +582,7 @@ with gr.Blocks(title="Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enable
 
 app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 
-with gr.Blocks(title="Proofreading by Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
+with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     button = gr.Button("Choose Selected Content",elem_id="ChooseSelectedContent")
     interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
@@ -600,6 +612,14 @@ with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, c
 app = gr.mount_gradio_app(app, custom_theme_AzureSearch, path="/buildazureindex")
 
 
+with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_rrIndex:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file"], outputs=["markdown",downloadRRbutton],allow_flagging="never",analytics_enabled=False)
+
+
+app = gr.mount_gradio_app(app, custom_theme_rrIndex, path="/buildrrindex")
+
+
 chatbot = gr.Chatbot(likeable=True,
                             show_share_button=True, 
                             show_copy_button=True, 
@@ -607,7 +627,7 @@ chatbot = gr.Chatbot(likeable=True,
                             )
 
 
-with gr.Blocks(title="Chat with Azure OpenAI GPT-4 Turbo",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_ChatBot:
+with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_ChatBot:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     with gr.Row():    
         with gr.Column(scale=1):

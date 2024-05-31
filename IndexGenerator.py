@@ -74,6 +74,7 @@ class StreamingGradioCallbackHandler(BaseCallbackHandler):
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Run on new LLM token. Only available when streaming is enabled."""
+        logging.info(token)
         self.q.put(token)
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
@@ -208,11 +209,15 @@ class IndexGenerator:
             else:
                 storage_context = StorageContext.from_defaults(graph_store=graph_store)
             
-            # Create the index from the documents
+            status = "Creating ndoes from documents"
+            self.streamingGradioCallbackHandler.on_llm_new_token(status)
+
             nodes = Settings.node_parser.get_nodes_from_documents(docs)
 
-            status = f"\n\n{datetime.now().isoformat()}: Processing batch 1 to 10, total {len(nodes)} nodes"
-            logging.warning(f"{status}")
+            status = "Nodes created from documents: "+str(len(nodes))+" nodes"
+            self.streamingGradioCallbackHandler.on_llm_new_token(status)
+
+            status = f"\n\n{datetime.now().isoformat()}: Processing batch 1 to 10, total {len(nodes)} nodes"           
             self.streamingGradioCallbackHandler.on_llm_new_token(status)
 
             rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
@@ -230,7 +235,6 @@ class IndexGenerator:
             for i in range(startFrom, len(nodes), batch_size):
 
                 status = f"\n\n{datetime.now().isoformat()}: Processing batch {i} to {i+batch_size}, total {len(nodes)} nodes"
-                logging.warning(f"{status}")
                 self.streamingGradioCallbackHandler.on_llm_new_token(status)
 
                 batch_nodes = nodes[i:i+batch_size]
@@ -253,7 +257,6 @@ class IndexGenerator:
                         self.streamingGradioCallbackHandler.on_llm_new_token(status)
 
                 status = f"\n\n{datetime.now().isoformat()}: Persisting batch {i} to {i+batch_size}, total {len(nodes)} nodes"
-                logging.warning(status)            
                 rules_index.storage_context.persist(persist_dir=persist_dir)   
                 self.streamingGradioCallbackHandler.on_llm_new_token(status)     
             
