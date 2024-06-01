@@ -527,12 +527,20 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
 
     if indexType == "Azure AI Search":
         azureAISearchIndexGenerator = AzureAISearchIndexGenerator(docPath="", indexName=indexName, idPrefix="")
-        index = azureAISearchIndexGenerator.LoadIndex()
+        azureAISearchIndexGenerator.LoadIndex()
         response = azureAISearchIndexGenerator.HybridSearch(str(history_openai_format))
         for text in response:
             yield text
     elif indexType == "Knowledge Graph":
         response = KnowledgeGraphIndexSearch(indexName, str(history_openai_format), message)
+        for text in response:
+            yield text
+    elif indexType == "Recursive Retriever":
+        recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (docPath="", indexName="", idPrefix="")
+        result = recursiveRetrieverIndexGenerator.LoadIndex(indexFolder=indexName)
+        for text in result:
+            pass
+        response = recursiveRetrieverIndexGenerator.RecursiveRetrieverSearch(str(history_openai_format))
         for text in response:
             yield text
        
@@ -632,7 +640,7 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
     with gr.Row():    
         with gr.Column(scale=1):
             with gr.Accordion("Chatbot Configuration", open=True):
-                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph"], label="Index Type", value="Azure AI Search")
+                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph", "Recursive Retriever"], label="Index Type", value="Azure AI Search")
                 textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
                 textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)
 
@@ -647,4 +655,4 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
 app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
 
 
-#custom_theme_ChatBot.launch()
+#custom_theme_rrIndex.launch()

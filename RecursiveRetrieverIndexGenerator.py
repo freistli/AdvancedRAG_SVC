@@ -99,7 +99,8 @@ class RecursiveRetrieverIndexGenerator:
 
         Settings.llm = self.llm
         Settings.embed_model = self.embed_model
-        Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
+        #Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
+        Settings.node_parser = SentenceSplitter(chunk_size=1024)
         self.llama_debug = LlamaDebugHandler(print_trace_on_end=True)
         self.token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
@@ -118,6 +119,8 @@ class RecursiveRetrieverIndexGenerator:
 
         os.makedirs(self.index_persist_dir, exist_ok=True)
 
+        self.indexFolder = self.index_persist_dir
+
         self.use_storage = True
 
         self.all_nodes = None
@@ -127,20 +130,21 @@ class RecursiveRetrieverIndexGenerator:
         self.index = None
     
 
-    def LoadIndex(self):
+    def LoadIndex(self,indexFolder=""):
         partialMessage = ""
         try:
+            self.indexFolder = indexFolder if indexFolder != "" else self.index_persist_dir
             begin = time.time()
             self.token_counter.reset_counts()        
-            if os.path.exists(self.index_persist_dir+"/docstore.json"):
+            if os.path.exists(indexFolder +"/docstore.json"):
                 docstore = SimpleDocumentStore()
-                storage_context = StorageContext.from_defaults(persist_dir=self.index_persist_dir)
+                storage_context = StorageContext.from_defaults(persist_dir=self.indexFolder)
                 self.index = load_index_from_storage(storage_context)
-                partialMessage += '\n\nIndex loaded from storage:' + self.index_persist_dir
+                partialMessage += '\n\nIndex loaded from storage:' + self.indexFolder
                 logging.info(partialMessage)                           
                 yield partialMessage
             else:
-                partialMessage += '\n\nIndex not found in storage:' + self.index_persist_dir
+                partialMessage += '\n\nIndex not found in storage:' + self.indexFolder
                 logging.info(partialMessage)
                 yield partialMessage
         except Exception as e:
@@ -264,6 +268,8 @@ class RecursiveRetrieverIndexGenerator:
                 with open(pickle_file_path, 'wb') as pickle_file:
                     pickle.dump(all_nodes_dict, pickle_file)
 
+                partialMessage += '\n\nLength of all_nodes: ' + str(len(all_nodes))
+
                 partialMessage += '\n\nall_nodes_dict saved to ' + pickle_file_path
                 logging.info(partialMessage)
                 
@@ -315,19 +321,19 @@ class RecursiveRetrieverIndexGenerator:
 
             if self.index is None:
                 if self.all_nodes is None:
-                    pickle_file_path = self.index_persist_dir + "/all_nodes.pickle"
+                    pickle_file_path = self.indexFolder + "/all_nodes.pickle"
                     with open(pickle_file_path, 'rb') as pickle_file:
                         self.all_nodes = pickle.load(pickle_file)
                 logging.info('all_nodes loaded from ' + pickle_file_path)
                 self.index = VectorStoreIndex(self.all_nodes, embed_model=self.embed_model)          
 
             if self.all_nodes_dict is None:
-                pickle_file_path = self.index_persist_dir + "/all_nodes_dict.pickle"
+                pickle_file_path = self.indexFolder + "/all_nodes_dict.pickle"
                 with open(pickle_file_path, 'rb') as pickle_file:
                     self.all_nodes_dict = pickle.load(pickle_file)
                 logging.info('all_nodes_dict loaded from ' + pickle_file_path)           
             
-            vector_retriever_chunk = self.index.as_retriever(similarity_top_k=2)
+            vector_retriever_chunk = self.index.as_retriever(similarity_top_k=5)
 
             retriever_chunk = RecursiveRetriever(
             "vector",
@@ -363,7 +369,8 @@ class RecursiveRetrieverIndexGenerator:
             status = '\n\nResponse took ' + str(end - begin) + ' seconds'
             logging.info(status)
             self.TokenCount()
-            yield status
+            partialMessage += status
+            logging.info(partialMessage)
         
 
 def TestGenerateIndex():
