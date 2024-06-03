@@ -487,7 +487,7 @@ def build_azure_index(indexName, filePath):
         yield status
 
 def build_RecursiveRetriever_index(filePath):
-    recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (filePath, "RR_"+Path(filePath).stem,"")
+    recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (filePath, "","")
     result = recursiveRetrieverIndexGenerator.GenerateOrLoadIndex()
     for msg, zipfile in result:
         yield msg, zipfile
