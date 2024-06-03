@@ -487,9 +487,9 @@ def build_azure_index(indexName, filePath):
     for status in result:
         yield status
 
-def build_RecursiveRetriever_index(filePath):
-    recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (filePath, "","")
-    result = recursiveRetrieverIndexGenerator.GenerateOrLoadIndex()
+def build_RecursiveRetriever_index(filePath,nodeRefer):
+    recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (filePath, "","", nodeRefer)
+    result = recursiveRetrieverIndexGenerator.GenerateOrLoadIndex(nodeRefer=nodeRefer)
     for msg, zipfile in result:
         yield msg, zipfile
 
@@ -580,6 +580,8 @@ downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
 downloadRRbutton = gr.DownloadButton(label="Download Index")
 downloadSummarybutton = gr.DownloadButton(label="Download Index")
 
+NodeReferenceCheckBox = gr.Checkbox(label="Node Reference", value=False)
+
 
 modelName = "Azure OpenAI GPT-4o"
 
@@ -640,7 +642,7 @@ app = gr.mount_gradio_app(app, custom_theme_AzureSearch, path="/buildazureindex"
 
 with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_rrIndex:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file"], outputs=["markdown",downloadRRbutton],allow_flagging="never",analytics_enabled=False)
+    interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file",NodeReferenceCheckBox], outputs=["markdown",downloadRRbutton],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_rrIndex, path="/buildrrindex")

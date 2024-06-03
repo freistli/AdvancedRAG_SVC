@@ -42,13 +42,20 @@ from llama_index.core.schema import IndexNode
 from llama_index.core.retrievers import RecursiveRetriever
 import pickle
 
+import copy
+
+from llama_index.core.extractors import (
+    SummaryExtractor,
+    QuestionsAnsweredExtractor,
+)
+
 load_dotenv('.env_4_SC')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 class RecursiveRetrieverIndexGenerator:
-    def __init__(self, docPath, indexName, idPrefix):
+    def __init__(self, docPath, indexName, idPrefix , node_refer=False):
         self.docPath = docPath
         self.idPrefix = idPrefix
         self.aoai_api_key = os.environ['AZURE_OPENAI_API_KEY']  
@@ -123,7 +130,10 @@ class RecursiveRetrieverIndexGenerator:
         # convert datetime obj to string
         str_current_datetime = str(current_datetime)
 
-        self.index_persist_dir = self.index_persist_dir+"/RR_" + Path(self.docPath).stem
+        if node_refer:
+            self.index_persist_dir = self.index_persist_dir+"/RR_NR_" + Path(self.docPath).stem
+        else:
+            self.index_persist_dir = self.index_persist_dir+"/RR_" + Path(self.docPath).stem
 
         os.makedirs(self.index_persist_dir, exist_ok=True)
 
@@ -182,7 +192,7 @@ class RecursiveRetrieverIndexGenerator:
             "\n",
             )
 
-    def GenerateOrLoadIndex(self, use_storage=True):
+    def GenerateOrLoadIndex(self, use_storage=True, nodeRefer = False):
         zipFile = None
         partialMessage = ""
         try:            
@@ -232,39 +242,68 @@ class RecursiveRetrieverIndexGenerator:
                     yield [partialMessage,"Pending"]
                         
                 docs = [Document(text=docs_string)]
-                base_nodes = Settings.node_parser.get_nodes_from_documents(docs)
+                base_nodes = Settings.node_parser.get_nodes_from_documents(docs)                
+
 
                 partialMessage += '\n\nGenerating base nodes: '+str(len(base_nodes))
                 logging.info(partialMessage)
                 yield [partialMessage,"Pending"]
 
-                # set node ids to be a constant
-                for idx, node in enumerate(base_nodes):
-                    node.id_ = f"node-{idx}"
+                if nodeRefer:
+                    partialMessage += '\n\nGenerating node references'
+                    logging.info(partialMessage)
+                    yield [partialMessage,"Pending"]
 
-                sub_chunk_sizes = [128, 256, 512]
-                sub_node_parsers = [
-                    SentenceSplitter(chunk_size=c, chunk_overlap=20) for c in sub_chunk_sizes
-                ]
+                    extractors = [
+                        SummaryExtractor(summaries=["self"], show_progress=True),
+                        QuestionsAnsweredExtractor(questions=5, show_progress=True),
+                    ]
+                    node_to_metadata = {}
+                    for extractor in extractors:
+                        metadata_dicts = extractor.extract(base_nodes)
+                        for node, metadata in zip(base_nodes, metadata_dicts):
+                            if node.node_id not in node_to_metadata:
+                                node_to_metadata[node.node_id] = metadata
+                            else:
+                                node_to_metadata[node.node_id].update(metadata)
 
-                partialMessage += '\n\nGenerating subnodes'
-                logging.info(partialMessage)
-                yield [partialMessage,"Pending"]
+                    # all nodes consists of source nodes, along with metadata
+                    all_nodes = copy.deepcopy(base_nodes)
+                    for node_id, metadata in node_to_metadata.items():
+                        for val in metadata.values():
+                            all_nodes.append(IndexNode(text=val, index_id=node_id))
 
-                all_nodes = []
-                for base_node in base_nodes:
-                    for n in sub_node_parsers:
-                        sub_nodes = n.get_nodes_from_documents([base_node])
-                        sub_inodes = [
-                            IndexNode.from_text_node(sn, base_node.node_id) for sn in sub_nodes
-                        ]
-                        all_nodes.extend(sub_inodes)
+          
+                    all_nodes_dict = {n.node_id: n for n in all_nodes}
 
-                    # also add original node to node
-                    original_node = IndexNode.from_text_node(base_node, base_node.node_id)
-                    all_nodes.append(original_node)
+                else:
+                    # set node ids to be a constant
+                    for idx, node in enumerate(base_nodes):
+                        node.id_ = f"node-{idx}"
 
-                all_nodes_dict = {n.node_id: n for n in all_nodes}
+                    sub_chunk_sizes = [128, 256, 512]
+                    sub_node_parsers = [
+                        SentenceSplitter(chunk_size=c, chunk_overlap=20) for c in sub_chunk_sizes
+                    ]
+
+                    partialMessage += '\n\nGenerating subnodes'
+                    logging.info(partialMessage)
+                    yield [partialMessage,"Pending"]
+
+                    all_nodes = []
+                    for base_node in base_nodes:
+                        for n in sub_node_parsers:
+                            sub_nodes = n.get_nodes_from_documents([base_node])
+                            sub_inodes = [
+                                IndexNode.from_text_node(sn, base_node.node_id) for sn in sub_nodes
+                            ]
+                            all_nodes.extend(sub_inodes)
+
+                        # also add original node to node
+                        original_node = IndexNode.from_text_node(base_node, base_node.node_id)
+                        all_nodes.append(original_node)
+
+                    all_nodes_dict = {n.node_id: n for n in all_nodes}
 
                 # Persist all_nodes using Pickle
                 pickle_file_path = self.index_persist_dir + "/all_nodes.pickle"
@@ -385,7 +424,7 @@ def TestGenerateIndex():
         testPath = ".\\rules\\rules_original.pdf"
         recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator(testPath, "","")
         logging.info('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        result= recursiveRetrieverIndexGenerator.GenerateOrLoadIndex(use_storage=True)
+        result= recursiveRetrieverIndexGenerator.GenerateOrLoadIndex(use_storage=True, nodeRefer=True)
         for text,zip in result:
             pass
         logging.info('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
