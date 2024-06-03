@@ -250,8 +250,7 @@ class SummaryIndexGenerator:
                 else:
                     storage_context = StorageContext.from_defaults(docstore=docstore)     
 
-                synthesizer = get_response_synthesizer(
-            response_mode="tree_summarize", use_async=True)
+                synthesizer = get_response_synthesizer(response_mode="tree_summarize", use_async=True)
 
                 doc_summary_index = DocumentSummaryIndex.from_documents(
                     docs,
@@ -260,8 +259,7 @@ class SummaryIndexGenerator:
                     response_synthesizer=synthesizer,
                     show_progress=True,
                     storage_context=storage_context,
-                )
-                
+                )                
 
                 doc_summary_index.storage_context.persist(persist_dir=self.index_persist_dir) 
                 partialMessage += '\n\nIndex saved to the folder ' + self.index_persist_dir

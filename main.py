@@ -56,6 +56,7 @@ import tiktoken
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
 from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
 from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
+from SummmaryIndexGenerator import SummaryIndexGenerator
 import networkx as nx
 from pyvis.network import Network
 
@@ -493,6 +494,13 @@ def build_RecursiveRetriever_index(filePath):
         yield msg, zipfile
 
 
+def build_Summary_index(filePath):
+    summaryIndexGenerator = SummaryIndexGenerator (filePath, "","")
+    result = summaryIndexGenerator.GenerateOrLoadIndex()
+    for msg, zipfile in result:
+        yield msg, zipfile
+
+
 def view_graph(persist_dir):
     if os.path.exists(persist_dir+"/docstore.json"):
         storage_context = StorageContext.from_defaults(persist_dir=persist_dir)
@@ -543,6 +551,14 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
         response = recursiveRetrieverIndexGenerator.RecursiveRetrieverSearch(str(history_openai_format))
         for text in response:
             yield text
+    elif indexType == "Summary Index":
+        summaryIndexGenerator = SummaryIndexGenerator (docPath="", indexName="", idPrefix="")
+        result = summaryIndexGenerator.LoadIndex(indexFolder=indexName)
+        for text in result:
+            pass
+        response = summaryIndexGenerator.SummaryRetrieverSearch(str(history_openai_format))
+        for text in response:
+            yield text
        
 def print_like_dislike(x: gr.LikeData):
     print(x.index, x.value, x.liked)
@@ -562,6 +578,8 @@ downloadbutton = gr.DownloadButton(label="Download Index")
 downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
 downloadproofreadbutton = gr.DownloadButton(label="Download Proofread Result")
 downloadRRbutton = gr.DownloadButton(label="Download Index")
+downloadSummarybutton = gr.DownloadButton(label="Download Index")
+
 
 modelName = "Azure OpenAI GPT-4o"
 
@@ -628,6 +646,14 @@ with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, 
 app = gr.mount_gradio_app(app, custom_theme_rrIndex, path="/buildrrindex")
 
 
+with gr.Blocks(title="Build Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_summaryIndex:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=build_Summary_index, inputs=["file"], outputs=["markdown",downloadSummarybutton],allow_flagging="never",analytics_enabled=False)
+
+
+app = gr.mount_gradio_app(app, custom_theme_summaryIndex, path="/buildsummaryindex")
+
+
 chatbot = gr.Chatbot(likeable=True,
                             show_share_button=True, 
                             show_copy_button=True, 
@@ -640,7 +666,7 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
     with gr.Row():    
         with gr.Column(scale=1):
             with gr.Accordion("Chatbot Configuration", open=True):
-                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph", "Recursive Retriever"], label="Index Type", value="Azure AI Search")
+                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph", "Recursive Retriever", "Summary Index"], label="Index Type", value="Azure AI Search")
                 textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
                 textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)
 
