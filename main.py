@@ -25,7 +25,6 @@ from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoad
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_experimental.text_splitter import SemanticChunker
 from langchain_text_splitters import TextSplitter, CharacterTextSplitter
 from llama_index.core import Document
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
@@ -75,7 +74,7 @@ ruleFilePath = ".//rules//rules_original.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
 
-persist_dir=tmpdirname+"/proofreading_rules"
+persist_dir=tmpdirname+"/index_cache"
 
 os.makedirs(persist_dir, exist_ok=True)
 
@@ -87,7 +86,7 @@ logging.info(persist_dir)
 
 trainFilePath = ".//rules//rules_train.pdf"
 
-train_persist_dir=tmpdirname+"/proofreading_rules"
+train_persist_dir=tmpdirname+"/index_cache"
 
 os.makedirs(train_persist_dir, exist_ok=True)
 
@@ -167,7 +166,7 @@ batch_size = 10
 
 prompt = ""
 systemMessage = SystemMessage(
-    content = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents.                Pay attention to some known issues:もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない, 優位性を意味する語.               Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
+    content = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents.                Pay attention to some known issues: はじめて, もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない, 優位性を意味する語.               Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
 )
 message = HumanMessage(
     content=prompt
@@ -683,4 +682,4 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
 app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
 
 
-#custom_theme_rrIndex.launch()
+#custom_theme_ChatBot.launch()

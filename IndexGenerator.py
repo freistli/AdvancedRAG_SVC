@@ -21,7 +21,6 @@ from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoad
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_experimental.text_splitter import SemanticChunker
 from langchain_text_splitters import TextSplitter, CharacterTextSplitter
 from llama_index.core import Document
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
@@ -135,7 +134,7 @@ class IndexGenerator:
        
         logging.info('Temporary directory ' + self.tmpdirname)
 
-        self.persist_dir= self.tmpdirname+"/proofreading_rules"
+        self.persist_dir= self.tmpdirname+"/index_cache"
 
         os.makedirs(self.persist_dir, exist_ok=True)
 

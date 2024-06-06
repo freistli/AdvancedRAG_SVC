@@ -14,7 +14,6 @@ from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoad
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_experimental.text_splitter import SemanticChunker
 from langchain_text_splitters import TextSplitter, CharacterTextSplitter
 from llama_index.core import Document
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
@@ -45,7 +44,7 @@ ruleFilePath = ".//rules//rules_original.pdf"
 
 logging.info('Temporary directory ' + tmpdirname)
 
-persist_dir=tmpdirname+"/proofreading_rules"
+persist_dir=tmpdirname+"/index_cache"
 
 os.makedirs(persist_dir, exist_ok=True)
 
@@ -57,7 +56,7 @@ logging.info(persist_dir)
 
 trainFilePath = ".//rules//rules_train.pdf"
 
-train_persist_dir=tmpdirname+"/proofreading_rules"
+train_persist_dir=tmpdirname+"/index_cache"
 
 os.makedirs(train_persist_dir, exist_ok=True)
 

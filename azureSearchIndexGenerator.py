@@ -36,7 +36,9 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.node_parser import SentenceSplitter, SemanticSplitterNodeParser
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from llama_index.core.callbacks import LlamaDebugHandler
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
 import tiktoken
+from llama_index.core.query_engine import SubQuestionQueryEngine
 
 
 load_dotenv('.env_4_SC')
@@ -61,6 +63,7 @@ class AzureAISearchIndexGenerator:
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,
+        
         )
         
         self.embed_model = AzureOpenAIEmbedding(
@@ -68,6 +71,7 @@ class AzureAISearchIndexGenerator:
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,
+
         )
 
         self.search_service_api_key = os.environ['AZURE_SEARCH_API_KEY']
@@ -99,7 +103,7 @@ class AzureAISearchIndexGenerator:
 
         Settings.llm = self.llm
         Settings.embed_model = self.embed_model
-        Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
+        Settings.node_parser = SentenceSplitter(chunk_size=512,chunk_overlap=128)
         self.llama_debug = LlamaDebugHandler(print_trace_on_end=True)
         self.token_counter = TokenCountingHandler(
             tokenizer=tiktoken.encoding_for_model('gpt-35-turbo').encode
@@ -125,8 +129,8 @@ class AzureAISearchIndexGenerator:
                 filterable_metadata_field_keys=self.metadata_fields,
                 index_management=IndexManagement.VALIDATE_INDEX,
                 id_field_key="id",
-                chunk_field_key="Text",
-                embedding_field_key="Embedding",
+                chunk_field_key="chunk",
+                embedding_field_key="embedding",
                 embedding_dimensionality=1536,
                 metadata_string_field_key="metadata",
                 doc_id_field_key="doc_id",
@@ -193,8 +197,8 @@ class AzureAISearchIndexGenerator:
                 index_name=self.index_name,  
                 index_management = IndexManagement.CREATE_IF_NOT_EXISTS,  
                 id_field_key="id",  
-                chunk_field_key="Text",  
-                embedding_field_key="Embedding",  
+                chunk_field_key="chunk",  
+                embedding_field_key="embedding",  
                 metadata_string_field_key="metadata",
                 doc_id_field_key="doc_id",
                 embedding_dimensionality=1536,
@@ -280,20 +284,53 @@ class AzureAISearchIndexGenerator:
             begin = time.time()
             self.token_counter.reset_counts()
 
+            '''
             self.hybrid_retriever = self.index.as_retriever(
-                vector_store_query_mode=VectorStoreQueryMode.SEMANTIC_HYBRID
+                vector_store_query_mode=VectorStoreQueryMode.HYBRID,
+                similarity_top_k=5                
             )
             self.query_engine = RetrieverQueryEngine.from_args(
                     self.hybrid_retriever,
                     streaming=True,
                     verbose=True
                 )
-            response_stream = self.query_engine.query(query)
+            '''
+
+            self.query_engine = self.index.as_query_engine(self.llm,
+                                                           streaming=True,
+                                                           verbose=True, 
+                                                           vector_store_query_mode= VectorStoreQueryMode.HYBRID, 
+                                                           similarity_top_k=5)
+
+            # setup base query engine as tool
+            query_engine_tools = [
+                QueryEngineTool(
+                    query_engine=self.index.as_query_engine(vector_store_query_mode= VectorStoreQueryMode.SEMANTIC_HYBRID),
+                    metadata=ToolMetadata(
+                        name=os.getenv('QueryEngineTool_Name'),
+                        description=os.getenv('QueryEngineTool_Description') ,
+                    ),
+                ),
+            ]
+
+            sub_query_engine = SubQuestionQueryEngine.from_defaults(
+                            query_engine_tools=query_engine_tools,
+                            use_async=True,)
+
+
+            response_stream = sub_query_engine.query(query)
             
+            partialMessage += response_stream.response
+            print(partialMessage+"\n")
+            yield partialMessage
+
+            '''
             for text in response_stream.response_gen:
                 partialMessage += text
                 print(partialMessage+"\n")
                 yield partialMessage
+            '''
+
         except Exception as e:
             logging.error('Error searching index')
             partialMessage  += '\n\n'+str(e)

@@ -63,7 +63,6 @@ kiwisolver==1.4.5
 langchain==0.1.13
 langchain-community==0.0.29
 langchain-core==0.1.33
-langchain-experimental==0.0.55
 langchain-openai==0.1.1
 langchain-text-splitters==0.0.1
 langsmith==0.1.31

@@ -7,7 +7,6 @@ openai
 markdownify
 langchain_openai
 gradio
-langchain_experimental
 fastapi
 langchain_community
 azure-ai-documentintelligence
