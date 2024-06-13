@@ -60,6 +60,9 @@ from uvicorn import run
 import multiprocessing
 import uvicorn
 
+
+load_dotenv('.env_4_SC')
+
 optimizer = SentenceEmbeddingOptimizer(
     percentile_cutoff=0.5,
     threshold_cutoff=0.7,
@@ -67,7 +70,7 @@ optimizer = SentenceEmbeddingOptimizer(
     context_after=1
 )
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()
@@ -107,7 +110,8 @@ rulesPath_index = None
 current_fine_Tune = None
 current_graph_path = None
 proofread_chunk = 500
-
+Predict_Concurrency = int(os.environ['Predict_Concurrency'])
+Build_Concurrency = int(os.environ['Build_Concurrency'])
 
 class FineTune:
     def __init__(self,  max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):    
@@ -121,9 +125,6 @@ class FineTune:
                     self.max_entities == other.max_entities and \
                     self.max_synonyms == other.max_synonyms and \
                     self.max_knowledge_sequence == other.max_knowledge_sequence        
-
-
-load_dotenv('.env_4_SC')
 
 endpoint = os.environ['DOC_AI_BASE']
 key = os.environ['DOC_AI_KEY']
@@ -167,7 +168,7 @@ batch_size = 10
 
 prompt = ""
 systemMessage = SystemMessage(
-    content = "Criticize the proofread content, especially for wrong words. Only use 当社の用字・用語の基準,  送り仮名の付け方, 現代仮名遣い,  接続詞の使い方 ，外来語の書き方，公正競争規約により使用を禁止されている語  製品の取扱説明書等において使用することはできない, 常用漢字表に記載されていない読み方, and 誤字 proofread rules, don't use other rules those are not in the retrieved documents.                Pay attention to some known issues: はじめて, もっとも, または->又は, 「ただし」という接続詞は原則として仮名で表記するため,「又は」という接続詞は原則として漢字で表記するため。また、「又は」は、最後の語句に“など”、「等(とう)」又は「その他」を付けてはならない, 優位性を意味する語.               Firstly show 原文, use bold text to point out every incorrect issue, and then give 校正理由, respond in Japanese. Finally give 修正後の文章, use bold text for modified text. If everything is correct, tell no issues, and don't provide 校正理由 or 修正後の文章."
+    content = os.environ['System_Message']
 )
 message = HumanMessage(
     content=prompt
@@ -196,7 +197,7 @@ def DebugLlama():
         print("Error")
     llama_debug.flush_event_logs()
 
-def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix="以下の文章を校正してください: "):
+def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.environ['Content_Prefix']):
 
     global rules_index
     global train_index
@@ -570,7 +571,7 @@ max_knowledge_sequence = gr.Slider(label="Max Knowledge Sequence", value=30, min
 
 texbox_Rules = gr.Textbox(lines=1, label="Knowledge Graph of Proofreading Rules (rules, train, compose)", value="rules")
 textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=systemMessage.content)
-textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value="今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。")
+textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value=os.environ['Sample_Content'])
 textbox_Content_Empty = gr.Textbox(lines=10)
 textbox_AzureSearchIndex =  gr.Textbox(lines=1, label="Azure AI Search Index Name", value="azuresearch_0")
 
@@ -585,7 +586,7 @@ NodeReferenceCheckBox = gr.Checkbox(label="Node Reference", value=False)
 
 modelName = "Azure OpenAI GPT-4o"
 
-with gr.Blocks(title=f"Advanced Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme:
+with gr.Blocks(title=f"Advanced Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=20) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules, 
@@ -600,7 +601,7 @@ with gr.Blocks(title=f"Advanced Proofreading by {modelName}",analytics_enabled=F
 app = gr.mount_gradio_app(app, custom_theme, path="/advproofread")
 
 
-with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_base:
+with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Predict_Concurrency,max_size=20) as custom_theme_base:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=proof_read, inputs=[texbox_Rules, 
                                                     textbox_QueryRules,
@@ -610,7 +611,7 @@ with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css
 
 app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 
-with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_addin:
+with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Predict_Concurrency,max_size=20) as custom_theme_addin:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     button = gr.Button("Choose Selected Content",elem_id="ChooseSelectedContent")
     interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
@@ -618,21 +619,21 @@ with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css
 
 app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
 
-with gr.Blocks(title="Build Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_index:
+with gr.Blocks(title="Build Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=20) as custom_theme_index:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown",downloadbutton],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_index, path="/buildragindex")
 
-with gr.Blocks(title="View Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_viewgraph:
+with gr.Blocks(title="View Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Predict_Concurrency,max_size=20) as custom_theme_viewgraph:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=view_graph, inputs=["text"], outputs=["markdown",downloadgraphbutton],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_viewgraph, path="/viewgraph")
 
-with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_AzureSearch:
+with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=20) as custom_theme_AzureSearch:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=build_azure_index, inputs=[textbox_AzureSearchIndex,"file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
@@ -640,7 +641,7 @@ with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, c
 app = gr.mount_gradio_app(app, custom_theme_AzureSearch, path="/buildazureindex")
 
 
-with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_rrIndex:
+with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=20) as custom_theme_rrIndex:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file",NodeReferenceCheckBox], outputs=["markdown",downloadRRbutton],allow_flagging="never",analytics_enabled=False)
 
@@ -648,7 +649,7 @@ with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, 
 app = gr.mount_gradio_app(app, custom_theme_rrIndex, path="/buildrrindex")
 
 
-with gr.Blocks(title="Build Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_summaryIndex:
+with gr.Blocks(title="Build Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=20) as custom_theme_summaryIndex:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     interface = gr.Interface(fn=build_Summary_index, inputs=["file"], outputs=["markdown",downloadSummarybutton],allow_flagging="never",analytics_enabled=False)
 
@@ -663,7 +664,7 @@ chatbot = gr.Chatbot(likeable=True,
                             )
 
 
-with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=3,max_size=20) as custom_theme_ChatBot:
+with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=20) as custom_theme_ChatBot:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     with gr.Row():    
         with gr.Column(scale=1):

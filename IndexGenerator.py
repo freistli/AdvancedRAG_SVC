@@ -44,7 +44,8 @@ import logging
 from enum import Enum
 import shutil
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+load_dotenv('.env_4_SC')
+logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 

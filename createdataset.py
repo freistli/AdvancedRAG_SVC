@@ -35,6 +35,7 @@ from llama_index.core.storage import StorageContext
 import tempfile
 import logging
 
+load_dotenv('.env_4_SC')
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 

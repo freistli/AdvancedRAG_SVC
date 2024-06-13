@@ -34,7 +34,8 @@ from pyvis.network import Network
 
 from matplotlib import pyplot as plt
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+load_dotenv('.env_4_SC')
+logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 tmpdirname = tempfile.gettempdir()

@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all
 
 binaries = []
 hiddenimports = ['tiktoken_ext.openai_public', 'tiktoken_ext']
-datas += collect_data_files('gradio_client')
+datas = collect_data_files('gradio_client')
 datas += collect_data_files('gradio')
 datas += collect_data_files('llama_index')
 datas += collect_data_files('pyvis')
@@ -36,7 +36,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='AdvRAGSvc',
+    name='WinAdvRAGSvc',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

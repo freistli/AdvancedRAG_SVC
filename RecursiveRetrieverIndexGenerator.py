@@ -51,7 +51,7 @@ from llama_index.core.extractors import (
 
 load_dotenv('.env_4_SC')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 class RecursiveRetrieverIndexGenerator:
