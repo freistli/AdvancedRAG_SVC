@@ -58,7 +58,30 @@
                 display: flex;
             }
         </style>
+        <script type="module">
+            import { registerMgtComponents, Providers, Msal2Provider } from 'https://unpkg.com/@microsoft/mgt@4';
+            
+            Providers.globalProvider = new Msal2Provider({clientId: '056c910f-8', authority:'https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47'});
+            registerMgtComponents();
+            var accessToken = null;
+            
+            const loadAProofreadSection = () => {
+            Providers.globalProvider.getAccessToken().then(token => {
+                    accessToken = token;
+                    console.log(token);
                 
+         
+                if(accessToken == null) {
+                    console.log("Not signed in");
+                }
+                else
+                    document.getElementById("main").style.display = "block";
+             
+                });
+            }
+            Providers.onProviderUpdated(loadAProofreadSection);
+          </script>
+        
         <script>
             function openTab(tabId) {
                 var i, tab, button;

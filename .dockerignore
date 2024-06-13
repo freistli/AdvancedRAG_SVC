@@ -26,3 +26,6 @@
 LICENSE
 README.md
 .env_4_SC
+build
+dist
+venv

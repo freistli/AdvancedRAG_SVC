@@ -18,10 +18,8 @@ import os
 from pathlib import Path
 import sys
 import time
-from IPython.display import display, HTML
 from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse, RedirectResponse
-from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
@@ -58,6 +56,9 @@ from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
 from SummmaryIndexGenerator import SummaryIndexGenerator
 import networkx as nx
 from pyvis.network import Network
+from uvicorn import run
+import multiprocessing
+import uvicorn
 
 optimizer = SentenceEmbeddingOptimizer(
     percentile_cutoff=0.5,
@@ -174,7 +175,7 @@ message = HumanMessage(
 
 
 
-import gradio as gr
+import gradio as gr 
 def stream_predict(message, history):
     prompt = ""
     message = HumanMessage(
@@ -682,4 +683,6 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
 app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
 
 
-#custom_theme_ChatBot.launch()
+if __name__ == '__main__':
+    multiprocessing.freeze_support()  # For Windows support
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False, workers=1)

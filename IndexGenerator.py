@@ -17,7 +17,6 @@ import time
 
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
-from langchain_community.document_loaders import AzureAIDocumentIntelligenceLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_core.callbacks import BaseCallbackHandler
