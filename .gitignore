@@ -3,6 +3,7 @@
 .env_4_FineTune
 .vscode
 __pycache__
+__*.json
 *.docx
 *.pdf
 storage

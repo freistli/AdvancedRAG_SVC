@@ -338,10 +338,19 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
         yield partial_message
     DebugLlama()
 
-def proof_read_addin(Content: str = ""):
+def proof_read_addin(Content: str = "", streaming: bool = True):
     result = proof_read("rules", systemMessage.content, Content, "", 5, 5, 2, 30, None, True)
-    for text in result:
-       yield text
+
+    if streaming == "True":
+        for text in result:
+            yield text
+    else:
+        response = ""
+        for text in result:   
+            if len(text) > len(response):  # Check if the length of text is longer than the current response
+                response = text         
+            pass
+        yield response 
     
 
 def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30,request: gr.Request = None , addin: bool = False, content_prefix="以下の文章を校正してください: "):
@@ -582,6 +591,7 @@ downloadRRbutton = gr.DownloadButton(label="Download Index")
 downloadSummarybutton = gr.DownloadButton(label="Download Index")
 
 NodeReferenceCheckBox = gr.Checkbox(label="Node Reference", value=False)
+StreamingCheckBox = gr.Checkbox(label="Streaming", value=True)
 
 
 modelName = "Azure OpenAI GPT-4o"
@@ -614,7 +624,7 @@ app = gr.mount_gradio_app(app, custom_theme_base, path="/proofread")
 with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Predict_Concurrency,max_size=20) as custom_theme_addin:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     button = gr.Button("Choose Selected Content",elem_id="ChooseSelectedContent")
-    interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+    interface = gr.Interface(fn=proof_read_addin, inputs=[textbox_Content,StreamingCheckBox], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
 
 
 app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
