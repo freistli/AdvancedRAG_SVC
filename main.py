@@ -341,7 +341,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
 def proof_read_addin(Content: str = "", streaming: bool = True):
     result = proof_read("rules", systemMessage.content, Content, "", 5, 5, 2, 30, None, True)
 
-    if streaming == "True":
+    if streaming == True:
         for text in result:
             yield text
     else:
