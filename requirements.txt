@@ -21,3 +21,6 @@ llama-index-vector-stores-azureaisearch
 azure-search-documents
 pypickle
 llama-index-llms-fireworks
+tqdm
+python-magic
+libmagic
