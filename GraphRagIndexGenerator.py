@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from zipfile import ZipFile
 from dotenv import load_dotenv
 from tqdm import tqdm
 import os
@@ -105,7 +106,7 @@ class GraphRagIndexGenerator:
         else:
             print(response)
 
-    def build_index(
+    def build_index_default(
             self,
         storage_name: str,
         index_name: str,
@@ -117,12 +118,54 @@ class GraphRagIndexGenerator:
         request = {"storage_name": storage_name, "index_name": index_name}
         return requests.post(url, params=request, headers=self.headers)
 
-    def test_build_index(self):
-        response = self.build_index(storage_name=self.storage_name, index_name=self.index_name)
+    def test_build_index_default(self):
+        response = self.build_index_default(storage_name=self.storage_name, index_name=self.index_name)
         if response.ok:
             print(response.text)
         else:
             print(f"Failed to submit job.\nStatus: {response.text}")
+    
+    def test_build_index_custom(self):
+        self.get_prompts_tempaltes()
+        response = self.build_index_custom(storage_name=self.storage_name, 
+                                           index_name=self.index_name,
+                                           entity_extraction_prompt_filepath=self.entity_prompt,
+                                           community_prompt_filepath=self.community_prompt,
+                                           summarize_description_prompt_filepath=self.summarize_prompt)
+        if response.ok:
+            print(response.text)
+        else:
+            print(f"Failed to submit job.\nStatus: {response.text}")
+    
+    def build_index_custom(
+            self,
+    storage_name: str,
+    index_name: str,
+    entity_extraction_prompt_filepath: str = None,
+    community_prompt_filepath: str = None,
+    summarize_description_prompt_filepath: str = None,
+) -> requests.Response:
+        """Create a search index.
+        This function kicks off a job that builds a knowledge graph (KG) index from files located in a blob storage container.
+        """
+        url = self.endpoint + "/index"
+        prompt_files = dict()
+        if entity_extraction_prompt_filepath:
+            prompt_files["entity_extraction_prompt"] = open(
+                entity_extraction_prompt_filepath, "r"
+            )
+        if community_prompt_filepath:
+            prompt_files["community_report_prompt"] = open(community_prompt_filepath, "r")
+        if summarize_description_prompt_filepath:
+            prompt_files["summarize_descriptions_prompt"] = open(
+                summarize_description_prompt_filepath, "r"
+            )
+        return requests.post(
+            url,
+            files=prompt_files if len(prompt_files) > 0 else None,
+            params={"index_name": index_name, "storage_name": storage_name},
+            headers=self.headers,
+        )
 
 
     def index_status(self,index_name: str) -> requests.Response:
@@ -189,18 +232,100 @@ class GraphRagIndexGenerator:
         local_response_data = self.parse_query_response(local_response, True)
         local_response_data
 
+    def list_files(self) -> requests.Response:
+        """List all data storage containers."""
+        url = self.endpoint + "/data"
+        response = requests.get(url=url, headers=self.headers)
+        print(response.text)
+        try:
+            indexes = json.loads(response.text)
+            return indexes["storage_name"]
+        except json.JSONDecodeError:
+            print(response.text)
+            return response
+        
+    
+    def list_indexes(self) -> list:
+        """List all search indexes."""
+        url = self.endpoint + "/index"
+        response = requests.get(url, headers=self.headers)
+        print(response.text)
+        try:
+            indexes = json.loads(response.text)
+            return indexes["index_name"]
+        except json.JSONDecodeError:
+            print(response.text)
+            return response
+        
+    def test_files(self):
+        response = self.list_files()
+        print(response)
+
+    def test_indexes(self):
+        response = self.list_indexes()
+        print(response)
+
+    def generate_prompts(self, storage_name: str, zip_file_name: str, limit: int = 1) -> None:
+        """Generate graphrag prompts using data provided in a specific storage container."""
+        url = self.endpoint + "/index/config/prompts"
+        params = {"storage_name": storage_name, "limit": limit}
+        with requests.get(url, params=params, headers=self.headers, stream=True) as r:
+            r.raise_for_status()
+            with open(zip_file_name, "wb") as f:
+                for chunk in r.iter_content():
+                    f.write(chunk)
+
+    def get_prompts_tempaltes(self):
+        # check if prompt files exist
+        entity_extraction_prompt_filepath = "prompts/entity_extraction.txt"
+        community_prompt_filepath = "prompts/community_report.txt"
+        summarize_description_prompt_filepath = "prompts/summarize_descriptions.txt"
+        self.entity_prompt = (
+            entity_extraction_prompt_filepath
+            if os.path.isfile(entity_extraction_prompt_filepath)
+            else None
+        )
+        self.community_prompt = (
+            community_prompt_filepath if os.path.isfile(community_prompt_filepath) else None
+        )
+        self.summarize_prompt = (
+            summarize_description_prompt_filepath
+            if os.path.isfile(summarize_description_prompt_filepath)
+            else None
+        )
+        print(f"Entity Prompt: {self.entity_prompt}")
+        print(f"Community Prompt: {self.community_prompt}")
+        print(f"Summarize Prompt: {self.summarize_prompt}")
+
+    def test_generate_prompts(self):
+        zip_file_name = "prompts.zip"
+        self.generate_prompts(storage_name=self.storage_name, zip_file_name=zip_file_name)
+        print(f"Prompts have been generated and saved to {zip_file_name}")
+        with ZipFile("prompts.zip", "r") as zip_ref:
+            zip_ref.extractall()
+
+    def delete_files(self,storage_name: str) -> requests.Response:
+        """Delete a blob storage container."""
+        url = self.endpoint + f"/data/{self.storage_name}"
+        return requests.delete(url=url, headers=self.headers)
+
 if __name__ == "__main__":
     file_directory = "C:\\Users\\freistli\\OneDrive - Microsoft\\POC\\GraphRAGProofread\\Input"
-    storage_name = "proofread"
-    index_name = "proofread"
+    storage_name = "proofread01"
+    index_name = "proofread01"
     sysMessage = os.environ['System_Message']
     contentPrefix = os.environ['Content_Prefix']
     #query = "Please proofread this content: \n 今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。\n"
     query = sysMessage + "\n" + contentPrefix +"\n 温古知新, 質議応答, 接渉"
     graghRAGEngine = GraphRagIndexGenerator(file_directory, storage_name, index_name)
+    #graghRAGEngine.delete_files(storage_name="whatiworkedon")
     #graghRAGEngine.test_upload_files()
-    #graghRAGEngine.test_build_index()
+    #graghRAGEngine.test_generate_prompts()
+    #graghRAGEngine.test_build_index_custom()
     while (graghRAGEngine.test_index_status() == False):
         time.sleep(5)
-    graghRAGEngine.test_global_search(query=query)
+    #graghRAGEngine.test_global_search(query=query)
     graghRAGEngine.test_local_search(query=query)
+    #graghRAGEngine.test_files()
+    #graghRAGEngine.test_indexes()
+    
