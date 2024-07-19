@@ -178,6 +178,17 @@ class GraphRagIndexGenerator:
         global_response_data = self.parse_query_response(global_response, True)
         global_response_data
 
+    def local_search(self, index_name: str | list[str], query: str) -> requests.Response:
+        """Run a local query over the knowledge graph(s) associated with one or more indexes"""
+        url = self.endpoint + "/query/local"
+        request = {"index_name": index_name, "query": query}
+        return requests.post(url, json=request, headers=self.headers)
+    
+    def test_local_search(self,query):
+        local_response = self.local_search(index_name=self.index_name, query=query)
+        local_response_data = self.parse_query_response(local_response, True)
+        local_response_data
+
 if __name__ == "__main__":
     file_directory = "C:\\Users\\freistli\\OneDrive - Microsoft\\POC\\GraphRAGProofread\\Input"
     storage_name = "proofread"
@@ -192,3 +203,4 @@ if __name__ == "__main__":
     while (graghRAGEngine.test_index_status() == False):
         time.sleep(5)
     graghRAGEngine.test_global_search(query=query)
+    graghRAGEngine.test_local_search(query=query)
