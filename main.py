@@ -54,6 +54,7 @@ from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
 from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
 from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
 from SummmaryIndexGenerator import SummaryIndexGenerator
+from GraphRagIndexGenerator import GraphRagIndexGenerator
 import networkx as nx
 from pyvis.network import Network
 from uvicorn import run
@@ -510,6 +511,29 @@ def build_Summary_index(filePath):
     for msg, zipfile in result:
         yield msg, zipfile
 
+def build_GraghRAG_index(filePath,storageName,indexName):
+    graphRagIndexGenerator = GraphRagIndexGenerator (filePath, storageName,indexName)
+    result = graphRagIndexGenerator.upload_files(os.path.dirname(filePath),storageName,overwrite=False)
+    yield result.text
+    result = graphRagIndexGenerator.build_index_default(storageName,indexName)
+    yield result.text
+    percent_complete = 0
+    while (percent_complete < 100):    
+            response = graphRagIndexGenerator.index_status(indexName)
+            if response.ok:
+                status_data = response.json()
+                percent_complete = status_data.get('percent_complete', 0)
+                progress = status_data.get('progress', 0)
+                if percent_complete >= 100:
+                    yield "Indexing is 100% complete."
+                else:
+                    yield f"{datetime.now()}: {percent_complete}% --> {progress}"
+            else:
+                yield f"Failed to get index status.\nStatus: {response.text}"
+            time.sleep(5)
+                
+
+
 
 def view_graph(persist_dir):
     if os.path.exists(persist_dir+"/docstore.json"):
@@ -583,6 +607,9 @@ textbox_QueryRules = gr.Textbox(lines=10, label="Preset Query Prompt", value=sys
 textbox_Content = gr.Textbox(lines=10, elem_id="ProofreadContent", label="Content to be Proofread", value=os.environ['Sample_Content'])
 textbox_Content_Empty = gr.Textbox(lines=10)
 textbox_AzureSearchIndex =  gr.Textbox(lines=1, label="Azure AI Search Index Name", value="azuresearch_0")
+textbox_GraphRAGStorageName =  gr.Textbox(lines=1, label="MS GraphRAG Storage Name", value="proofread01")
+textbox_GraphRAGIndex =  gr.Textbox(lines=1, label="MS GraphRAG Index Name", value="proofread01")
+
 
 downloadbutton = gr.DownloadButton(label="Download Index")
 downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
@@ -692,6 +719,14 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
 
 
 app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
+
+
+with gr.Blocks(title="Build MS GraphRAG Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=20) as custom_theme_GraghRAGIndex:
+    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+    interface = gr.Interface(fn=build_GraghRAG_index, inputs=["file",textbox_GraphRAGStorageName, textbox_GraphRAGIndex], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
+
+
+app = gr.mount_gradio_app(app, custom_theme_GraghRAGIndex, path="/buildGraghRAGindex")
 
 
 if __name__ == '__main__':

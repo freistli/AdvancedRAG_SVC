@@ -180,7 +180,7 @@ class GraphRagIndexGenerator:
             percent_complete = status_data.get('percent_complete', 0)
             progress = status_data.get('progress', 0)
             if percent_complete >= 100:
-                print("Indexing is more than 100% complete.")
+                print("Indexing is 100% complete.")
                 return True
             else:
                 print(f"{datetime.now()}: {percent_complete}% --> {progress}")
@@ -308,24 +308,36 @@ class GraphRagIndexGenerator:
         """Delete a blob storage container."""
         url = self.endpoint + f"/data/{self.storage_name}"
         return requests.delete(url=url, headers=self.headers)
+    
+    def delete_index(self,index_name: str) -> requests.Response:
+        """Delete a search index."""
+        url = self.endpoint + f"/index/{index_name}"
+        return requests.delete(url, headers=self.headers)
+    
+    def test_delete_index(self):
+        response = self.delete_index(index_name=self.index_name)
+        print(response.text)
 
 if __name__ == "__main__":
     file_directory = "C:\\Users\\freistli\\OneDrive - Microsoft\\POC\\GraphRAGProofread\\Input"
-    storage_name = "proofread01"
-    index_name = "proofread01"
-    sysMessage = os.environ['System_Message']
-    contentPrefix = os.environ['Content_Prefix']
+    storage_name = "workedon02"
+    index_name = "workedon02"
+    #sysMessage = os.environ['System_Message']
+    #contentPrefix = os.environ['Content_Prefix']
     #query = "Please proofread this content: \n 今回は半導体製造装置セクターの最近の動きを分析します。このセクターが成長性のあるセクターであるという意見は変えません。また、後工程（テスタ、ダイサなど）は2023年4-6月期、前工程（ウェハプロセス装置）は7-9月期または 10-12月期等 で大底を打ち、その後は回復、再成長に向かうと思われます。但し 、足元ではいくつか問題も出ています。\n"
-    query = sysMessage + "\n" + contentPrefix +"\n 温古知新, 質議応答, 接渉"
+    #query = sysMessage + "\n" + contentPrefix +"\n 温古知新, 質議応答, 接渉"
+    query = "这篇文章给人的最大启发是什么"
     graghRAGEngine = GraphRagIndexGenerator(file_directory, storage_name, index_name)
     #graghRAGEngine.delete_files(storage_name="whatiworkedon")
     #graghRAGEngine.test_upload_files()
     #graghRAGEngine.test_generate_prompts()
     #graghRAGEngine.test_build_index_custom()
-    while (graghRAGEngine.test_index_status() == False):
-        time.sleep(5)
+    #graghRAGEngine.test_delete_index()
+    #while (graghRAGEngine.test_index_status() == False):
+    #    time.sleep(5)
     #graghRAGEngine.test_global_search(query=query)
+    graghRAGEngine.test_index_status()
     graghRAGEngine.test_local_search(query=query)
-    #graghRAGEngine.test_files()
-    #graghRAGEngine.test_indexes()
+    graghRAGEngine.test_files()
+    graghRAGEngine.test_indexes()
     
