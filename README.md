@@ -1,3 +1,11 @@
+## Advanced RAG Service
+
+### Purpose
+
+Quick MVP/POCm playground to verify which Index type can exactly address the specific (usually related to accuracy) LLM RAG use case.
+
+Http Clients and MS Office Word/Outlook Add-In can easily use proper vector index types to search doc info and generate LLM response from the service.
+
 ### Functionalities
 
 Build and perform queries on multiple importnat Index types. Below is the info about index types and how the project implements them:
@@ -14,6 +22,6 @@ Build and perform queries on multiple importnat Index types. Below is the info a
 
 - Summary Index : [LlamaIndex](https://docs.llamaindex.ai/en/latest/api_reference/indices/summary/)
 
-### Quick Deployment
+### Quick Deployment & User Manul
 
 https://github.com/freistli/AdvancedRAG
