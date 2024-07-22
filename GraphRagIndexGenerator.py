@@ -201,7 +201,7 @@ class GraphRagIndexGenerator:
         if response.ok:
             print(json.loads(response.text)["result"])
             if return_context_data:
-                return json.loads(response.text)["context_data"]
+                return json.loads(response.text)["result"], json.loads(response.text)["context_data"]
             return response
         else:
             print(response.reason)
@@ -218,8 +218,9 @@ class GraphRagIndexGenerator:
 
     def test_global_search(self,query):
         global_response = self.global_search(index_name=self.index_name, query=query)
-        global_response_data = self.parse_query_response(global_response, True)
-        global_response_data
+        result, context = self.parse_query_response(global_response, True)
+        print(result)
+        return result, context
 
     def local_search(self, index_name: str | list[str], query: str) -> requests.Response:
         """Run a local query over the knowledge graph(s) associated with one or more indexes"""
@@ -229,8 +230,9 @@ class GraphRagIndexGenerator:
     
     def test_local_search(self,query):
         local_response = self.local_search(index_name=self.index_name, query=query)
-        local_response_data = self.parse_query_response(local_response, True)
-        local_response_data
+        result, context = self.parse_query_response(local_response, True)
+        print(result)
+        return result, context
 
     def list_files(self) -> requests.Response:
         """List all data storage containers."""

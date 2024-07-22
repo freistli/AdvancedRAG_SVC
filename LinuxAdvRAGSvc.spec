@@ -9,7 +9,10 @@ datas = collect_data_files('gradio_client')
 datas += collect_data_files('gradio')
 datas += collect_data_files('llama_index')
 datas += collect_data_files('pyvis')
+
 tmp_ret = collect_all('langchain_community')
+tmp_ret += collect_all('python-magic')
+tmp_ret += collect_all('libmagic')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 

@@ -114,6 +114,13 @@ proofread_chunk = 500
 Predict_Concurrency = int(os.environ['Predict_Concurrency'])
 Build_Concurrency = int(os.environ['Build_Concurrency'])
 
+AZURE_AI_SEARCH = "Azure AI Search"
+MS_GRAPHRAG_LOCAL = "MS GraghRAG Local"
+MS_GRAPHRAG_GLOBAL = "MS GraghRAG Global"
+KNOWLEDGE_GRAPH = "Knowledge Graph"
+RECURSIVE_RETRIEVER = "Recursive Retriever"
+SUMMARY_INDEX = "Summary Index"
+
 class FineTune:
     def __init__(self,  max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):    
         self.graph_traversal_depth = graph_traversal_depth
@@ -567,17 +574,25 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
             history_openai_format.append({"role": "assistant", "content":assistant})
     history_openai_format.append({"role": "user", "content": message})
 
-    if indexType == "Azure AI Search":
+    if indexType == AZURE_AI_SEARCH:
         azureAISearchIndexGenerator = AzureAISearchIndexGenerator(docPath="", indexName=indexName, idPrefix="")
         azureAISearchIndexGenerator.LoadIndex()
         response = azureAISearchIndexGenerator.HybridSearch(str(history_openai_format))
         for text in response:
             yield text
-    elif indexType == "Knowledge Graph":
+    elif indexType == KNOWLEDGE_GRAPH:
         response = KnowledgeGraphIndexSearch(indexName, str(history_openai_format), message)
         for text in response:
             yield text
-    elif indexType == "Recursive Retriever":
+    elif indexType == MS_GRAPHRAG_GLOBAL:
+        graphRagIndexGenerator = GraphRagIndexGenerator("","",indexName)
+        result,context = graphRagIndexGenerator.test_global_search(str(history_openai_format))
+        yield result
+    elif indexType == MS_GRAPHRAG_LOCAL:
+        graphRagIndexGenerator = GraphRagIndexGenerator("","",indexName)
+        result,context  = graphRagIndexGenerator.test_local_search(str(history_openai_format))
+        yield result
+    elif indexType == RECURSIVE_RETRIEVER:
         recursiveRetrieverIndexGenerator = RecursiveRetrieverIndexGenerator (docPath="", indexName="", idPrefix="")
         result = recursiveRetrieverIndexGenerator.LoadIndex(indexFolder=indexName)
         for text in result:
@@ -585,7 +600,7 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
         response = recursiveRetrieverIndexGenerator.RecursiveRetrieverSearch(str(history_openai_format))
         for text in response:
             yield text
-    elif indexType == "Summary Index":
+    elif indexType == SUMMARY_INDEX:
         summaryIndexGenerator = SummaryIndexGenerator (docPath="", indexName="", idPrefix="")
         result = summaryIndexGenerator.LoadIndex(indexFolder=indexName)
         for text in result:
@@ -706,7 +721,7 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
     with gr.Row():    
         with gr.Column(scale=1):
             with gr.Accordion("Chatbot Configuration", open=True):
-                radtio_ptions = gr.Radio(["Azure AI Search","Knowledge Graph", "Recursive Retriever", "Summary Index"], label="Index Type", value="Azure AI Search")
+                radtio_ptions = gr.Radio([AZURE_AI_SEARCH,MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL,KNOWLEDGE_GRAPH,RECURSIVE_RETRIEVER, SUMMARY_INDEX], label="Index Type", value="Azure AI Search")
                 textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
                 textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)
 
