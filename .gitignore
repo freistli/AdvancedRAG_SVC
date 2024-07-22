@@ -12,3 +12,4 @@ dist
 venv
 prompts
 prompts.zip
+*.jsonl
