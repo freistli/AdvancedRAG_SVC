@@ -566,7 +566,7 @@ def KnowledgeGraphIndexSearch(indexName, systemMessage, content):
     for text in result:
        yield text
  
-def chat_bot(message, history, indexType, indexName, systemMessage):
+def chat_bot(message, history, indexType, indexName, systemMessage, streaming: bool = True):
     history_openai_format = []
     history_openai_format.append({"role": "system", "content": systemMessage})
     for human, assistant in history:
@@ -574,16 +574,16 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
             history_openai_format.append({"role": "assistant", "content":assistant})
     history_openai_format.append({"role": "user", "content": message})
 
+    response = None  
+
     if indexType == AZURE_AI_SEARCH:
         azureAISearchIndexGenerator = AzureAISearchIndexGenerator(docPath="", indexName=indexName, idPrefix="")
         azureAISearchIndexGenerator.LoadIndex()
         response = azureAISearchIndexGenerator.HybridSearch(str(history_openai_format))
-        for text in response:
-            yield text
+        
     elif indexType == KNOWLEDGE_GRAPH:
         response = KnowledgeGraphIndexSearch(indexName, str(history_openai_format), message)
-        for text in response:
-            yield text
+        
     elif indexType == MS_GRAPHRAG_GLOBAL:
         graphRagIndexGenerator = GraphRagIndexGenerator("","",indexName)
         result,context = graphRagIndexGenerator.test_global_search(str(history_openai_format))
@@ -598,17 +598,26 @@ def chat_bot(message, history, indexType, indexName, systemMessage):
         for text in result:
             pass
         response = recursiveRetrieverIndexGenerator.RecursiveRetrieverSearch(str(history_openai_format))
-        for text in response:
-            yield text
+        
     elif indexType == SUMMARY_INDEX:
         summaryIndexGenerator = SummaryIndexGenerator (docPath="", indexName="", idPrefix="")
         result = summaryIndexGenerator.LoadIndex(indexFolder=indexName)
         for text in result:
             pass
-        response = summaryIndexGenerator.SummaryRetrieverSearch(str(history_openai_format))
-        for text in response:
-            yield text
-       
+        response = summaryIndexGenerator.SummaryRetrieverSearch(str(history_openai_format))        
+
+    if response is not None:
+        if streaming == True:
+            for text in response:
+                yield text
+        else:
+            finalResponse = ""
+            for text in response:   
+                if len(text) > len(finalResponse):  # Check if the length of text is longer than the current response
+                    finalResponse = text         
+                pass
+            yield finalResponse 
+
 def print_like_dislike(x: gr.LikeData):
     print(x.index, x.value, x.liked)
 
@@ -710,7 +719,7 @@ app = gr.mount_gradio_app(app, custom_theme_summaryIndex, path="/buildsummaryind
 
 
 chatbot = gr.Chatbot(likeable=True,
-                            show_share_button=True, 
+                            show_share_button=False, 
                             show_copy_button=True, 
                             bubble_full_width = False,
                             )
@@ -721,15 +730,17 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
     with gr.Row():    
         with gr.Column(scale=1):
             with gr.Accordion("Chatbot Configuration", open=True):
+                checkbox_Stream = gr.Checkbox(label="Streaming", value=True)
                 radtio_ptions = gr.Radio([AZURE_AI_SEARCH,MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL,KNOWLEDGE_GRAPH,RECURSIVE_RETRIEVER, SUMMARY_INDEX], label="Index Type", value="Azure AI Search")
                 textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
                 textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)
+                
 
         with gr.Column(scale=3): 
             chatbot.like(print_like_dislike,None, None)                   
             bot = gr.ChatInterface(chat_bot,
                              chatbot=chatbot,
-                             additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage], 
+                             additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage, checkbox_Stream], 
                              examples = [["provide summary for the document"],["give me insights of the document"]])    
 
 

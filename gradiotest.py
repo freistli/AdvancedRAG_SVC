@@ -21,6 +21,7 @@ def ChatBotTest():
 			"Azure AI Search",	# Literal['Azure AI Search', 'Knowledge Graph', 'Recursive Retriever', 'Summary Index'] in 'Index Type' Radio component
 			"azuresearch_0",	# str in 'Search Index Name, can be index folders or Azure AI Search Index Name' Textbox component
 			"You are a friendly AI Assistant",	# str in 'System Message' Textbox component
+			False,
 			api_name="/chat"
 	)
 	print(result)
@@ -43,6 +44,6 @@ def PrintAPIInfo():
 	
 
 if __name__ == '__main__':
-	PrintAPIInfo()
-	#ChatBotTest()
+	#PrintAPIInfo()
+	ChatBotTest()
 	ProofReadAddinTest()
