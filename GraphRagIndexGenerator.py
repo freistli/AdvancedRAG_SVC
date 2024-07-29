@@ -9,7 +9,7 @@ from zipfile import ZipFile
 from dotenv import load_dotenv
 from tqdm import tqdm
 import os
-import magic
+#import magic
 import requests
 
 load_dotenv('.env_4_SC')
@@ -74,7 +74,7 @@ class GraphRagIndexGenerator:
             if (
                 not file.is_file()
                 or file.suffix != ".txt"
-                or magic.from_file(str(file), mime=True) not in accepted_file_types
+                #or magic.from_file(str(file), mime=True) not in accepted_file_types
             ):
                 print(f"Skipping invalid file: {file}")
                 continue

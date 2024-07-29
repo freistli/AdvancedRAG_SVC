@@ -48,6 +48,7 @@ logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 class AzureAISearchIndexGenerator:
     def __init__(self, docPath, indexName, idPrefix):
+        
         self.docPath = docPath
         self.idPrefix = idPrefix
         self.aoai_api_key = os.environ['AZURE_OPENAI_API_KEY']  
@@ -77,6 +78,8 @@ class AzureAISearchIndexGenerator:
         self.search_service_api_key = os.environ['AZURE_SEARCH_API_KEY']
         self.search_service_endpoint = os.environ['AZURE_SEARCH_ENDPOINT']
         self.search_service_api_version = os.environ['AZURE_SEARCH_API_VERSION']
+        
+        self.useSubQueryEngine = os.environ['USE_SUB_QUERY_ENGINE']
 
         self.index_name = indexName
 
@@ -296,40 +299,45 @@ class AzureAISearchIndexGenerator:
                 )
             '''
 
-            self.query_engine = self.index.as_query_engine(self.llm,
+            if self.useSubQueryEngine == "False":
+                self.query_engine = self.index.as_query_engine(self.llm,
                                                            streaming=True,
                                                            verbose=True, 
-                                                           vector_store_query_mode= VectorStoreQueryMode.HYBRID, 
+                                                           vector_store_query_mode= VectorStoreQueryMode.SEMANTIC_HYBRID, 
                                                            similarity_top_k=5)
-
-            # setup base query engine as tool
-            query_engine_tools = [
-                QueryEngineTool(
-                    query_engine=self.index.as_query_engine(vector_store_query_mode= VectorStoreQueryMode.SEMANTIC_HYBRID),
-                    metadata=ToolMetadata(
-                        name=os.getenv('QueryEngineTool_Name'),
-                        description=os.getenv('QueryEngineTool_Description') ,
-                    ),
-                ),
-            ]
-
-            sub_query_engine = SubQuestionQueryEngine.from_defaults(
-                            query_engine_tools=query_engine_tools,
-                            use_async=True,)
-
-
-            response_stream = sub_query_engine.query(query)
+                response_stream = self.query_engine.query(query)
             
-            partialMessage += response_stream.response
-            print(partialMessage+"\n")
-            yield partialMessage
+                for text in response_stream.response_gen:
+                    partialMessage += text
+                    print(partialMessage+"\n")          
+                    yield partialMessage
+                
+            elif self.useSubQueryEngine == "True":
+                # setup base query engine as tool
+                query_engine_tools = [
+                    QueryEngineTool(
+                        query_engine=self.index.as_query_engine(llm=self.llm, vector_store_query_mode= VectorStoreQueryMode.SEMANTIC_HYBRID,streaming=True),
+                        metadata=ToolMetadata(
+                            name=os.getenv('QueryEngineTool_Name'),
+                            description=os.getenv('QueryEngineTool_Description') ,
+                        ),
+                    ),
+                ]
 
-            '''
-            for text in response_stream.response_gen:
-                partialMessage += text
-                print(partialMessage+"\n")
-                yield partialMessage
-            '''
+                self.sub_query_engine = SubQuestionQueryEngine.from_defaults(
+                                query_engine_tools=query_engine_tools,
+                                llm=self.llm,
+                                use_async=False)
+                
+                
+                response_stream = self.sub_query_engine.query(query)
+                
+                partialMessage += response_stream.response
+
+                yield partialMessage 
+                
+                
+                         
 
         except Exception as e:
             logging.error('Error searching index')
