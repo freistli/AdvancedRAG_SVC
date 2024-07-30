@@ -177,13 +177,13 @@ batch_size = 10
 
 prompt = ""
 systemMessage = SystemMessage(
-    content = os.environ['System_Message']
+    content = os.environ['Proofread_System_Message']
 )
 message = HumanMessage(
     content=prompt
 )
 
-
+default_system_message = os.environ['Default_System_Message']
 
 import gradio as gr 
 def stream_predict(message, history):
@@ -480,6 +480,16 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
 
 js = "custom.js"
 
+css = """
+footer{display:none !important}
+[role="tab"]
+{
+   font-family: 'Arial', sans-serif;
+   font-size: 20px;
+   font-weight: bold;
+}
+"""
+
 app = FastAPI()
 @app.get("/",response_class=HTMLResponse)
 def read_main():
@@ -673,97 +683,10 @@ with gr.Blocks(title=f"Proofreading by {modelName}",analytics_enabled=False, css
 app = gr.mount_gradio_app(app, custom_theme_addin, path="/proofreadaddin")
 
 
-'''
-with gr.Blocks(title="Build Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_index:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    downloadbutton = gr.DownloadButton(label="Download Index")
-    
-    interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown",downloadbutton],allow_flagging="never",analytics_enabled=False)
-
-
-app = gr.mount_gradio_app(app, custom_theme_index, path="/buildragindex")
-
-with gr.Blocks(title="View Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Predict_Concurrency,max_size=Max_Queue_Size) as custom_theme_viewgraph:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    downloadgraphbutton = gr.DownloadButton(label="Download Graph View")
-    interface = gr.Interface(fn=view_graph, inputs=["text"], outputs=["markdown",downloadgraphbutton],allow_flagging="never",analytics_enabled=False)
-
-app = gr.mount_gradio_app(app, custom_theme_viewgraph, path="/viewgraph")
-
-with gr.Blocks(title="Build Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_AzureSearch:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    textbox_AzureSearchIndex =  gr.Textbox(lines=1, label="Azure AI Search Index Name", value="azuresearch_0")
-    interface = gr.Interface(fn=build_azure_index, inputs=[textbox_AzureSearchIndex,"file"], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
-
-app = gr.mount_gradio_app(app, custom_theme_AzureSearch, path="/buildazureindex")
-
-
-with gr.Blocks(title="Build Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_rrIndex:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    downloadRRbutton = gr.DownloadButton(label="Download Index")
-    NodeReferenceCheckBox = gr.Checkbox(label="Node Reference", value=False)
-    interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file",NodeReferenceCheckBox], outputs=["markdown",downloadRRbutton],allow_flagging="never",analytics_enabled=False)
-
-
-app = gr.mount_gradio_app(app, custom_theme_rrIndex, path="/buildrrindex")
-
-
-
-
-with gr.Blocks(title="Build MS GraphRAG Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_GraghRAGIndex:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    textbox_GraphRAGStorageName =  gr.Textbox(lines=1, label="MS GraphRAG Storage Name", value="proofread01")
-    textbox_GraphRAGIndex =  gr.Textbox(lines=1, label="MS GraphRAG Index Name", value="proofread01")
-    interface = gr.Interface(fn=build_GraghRAG_index, inputs=["file",textbox_GraphRAGStorageName, textbox_GraphRAGIndex], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
-
-
-app = gr.mount_gradio_app(app, custom_theme_GraghRAGIndex, path="/buildGraghRAGindex")
-
-with gr.Blocks(title="Build Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_summaryIndex:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    downloadSummarybutton = gr.DownloadButton(label="Download Index")
-    interface = gr.Interface(fn=build_Summary_index, inputs=["file"], outputs=["markdown",downloadSummarybutton],allow_flagging="never",analytics_enabled=False)
-    interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-
-app = gr.mount_gradio_app(app, custom_theme_summaryIndex, path="/buildsummaryindex")
-
-with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme_ChatBot:
-    #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-    with gr.Row():    
-        with gr.Column(scale=1):
-            with gr.Accordion("Chatbot Configuration", open=True):
-                checkbox_Stream = gr.Checkbox(label="Streaming", value=True)
-                radtio_ptions = gr.Radio([AZURE_AI_SEARCH,MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL,KNOWLEDGE_GRAPH,RECURSIVE_RETRIEVER, SUMMARY_INDEX], label="Index Type", value="Azure AI Search")
-                textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
-        with gr.Column(scale=3): 
-            chatbot = gr.Chatbot(likeable=True,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        )
-            chatbot.like(print_like_dislike,None, None)       
-            textbox_systemMessage = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=9)            
-            interface = gr.ChatInterface(fn=chat_bot,
-                             chatbot=chatbot,
-                             additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage, checkbox_Stream], 
-                             submit_btn="Chat",                             
-                             examples = [["provide summary for the document"],["give me insights of the document"]])  
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)  
-
-
-app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
-'''
-
-
-
-
-
-with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_AzureSearchV2:
+with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_AzureSearchV2:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
        input_indexname_azuresearch = gr.Textbox("azuresearch_0",lines=1)  
-       with gr.Accordion("Build Index", open=False):
-                         
+       with gr.Tab("Build Index"):                         
                 input_file_azuresearch = gr.File()
                 output_markdown_azuresearch = gr.Markdown()
                 interface=gr.Interface(fn=build_azure_index, inputs=[input_indexname_azuresearch,input_file_azuresearch], outputs=[output_markdown_azuresearch],
@@ -771,10 +694,10 @@ with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=
                             analytics_enabled=False,
                             submit_btn="Build Index")
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-       with gr.Accordion("Chat Mode", open=False):
+       with gr.Tab("Chat Mode"):
                 radtio_ptions_azuresearch = gr.Radio([AZURE_AI_SEARCH], label="Index Type", value="Azure AI Search", visible=False)
                 with gr.Accordion("Chat Settings", open=False):            
-                    textbox_systemMessage_azuresearch = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+                    textbox_systemMessage_azuresearch = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
                 checkbox_Stream_azuresearch = gr.Checkbox(label="Streaming", value=True)
                 interface=gr.ChatInterface(fn=chat_bot,
                                     chatbot= gr.Chatbot(likeable=False,
@@ -791,16 +714,16 @@ with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=
        app = gr.mount_gradio_app(app, custom_theme_AzureSearchV2, path="/buildrunazureindex")
 
 
-with gr.Blocks(title="Build and Run Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_summaryIndexV2:
+with gr.Blocks(title="Build and Run Summary Index",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_summaryIndexV2:
     input_indexname_summary = gr.Textbox(label="Index Name",placeholder= "Summary index folder path generated by Index building",lines=1)   
-    with gr.Row():
-        with gr.Column(scale=1): 
+    with gr.Tab("Build Index"):
             downloadbutton_summary = gr.DownloadButton(label="Download Index")
             interface = gr.Interface(fn=build_Summary_index, inputs=["file"], outputs=["markdown",downloadbutton_summary],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-        with gr.Column(scale=2):    
-            radtio_ptions_summary = gr.Radio([SUMMARY_INDEX], label="Index Type", value=SUMMARY_INDEX, visible=False)            
-            textbox_systemMessage_summary = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+    with gr.Tab("Chat Mode"):   
+            radtio_ptions_summary = gr.Radio([SUMMARY_INDEX], label="Index Type", value=SUMMARY_INDEX, visible=False)   
+            with gr.Accordion("Chat Settings", open=False):           
+                textbox_systemMessage_summary = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
             checkbox_Stream_summary = gr.Checkbox(label="Streaming", value=True)
             interface=gr.ChatInterface(fn=chat_bot,
                                 chatbot= gr.Chatbot(likeable=False,
@@ -818,17 +741,17 @@ with gr.Blocks(title="Build and Run Summary Index",analytics_enabled=False, css=
     app = gr.mount_gradio_app(app, custom_theme_summaryIndexV2, path="/buildrunsummaryindex")
 
 
-with gr.Blocks(title="Build and Run Recursive Retriever Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_rrIndexV2:
+with gr.Blocks(title="Build and Run Recursive Retriever Index",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_rrIndexV2:
     input_indexname_rr = gr.Textbox(label="Index Name",placeholder= "Recursive Retriever Index folder path generated by Index building",lines=1)   
-    with gr.Row():
-        with gr.Column(scale=1): 
+    with gr.Tab("Build Index"): 
             downloadbutton_rr = gr.DownloadButton(label="Download Index")
             NodeReferenceCheckBox_rr = gr.Checkbox(label="Node Reference", value=False)
             interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file",NodeReferenceCheckBox_rr], outputs=["markdown",downloadbutton_rr],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-        with gr.Column(scale=2):
-            radtio_options_rr = gr.Radio([RECURSIVE_RETRIEVER], label="Index Type", value=RECURSIVE_RETRIEVER, visible=False)            
-            textbox_systemMessage_rr = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+    with gr.Tab("Chat Mode"):
+            radtio_options_rr = gr.Radio([RECURSIVE_RETRIEVER], label="Index Type", value=RECURSIVE_RETRIEVER, visible=False)
+            with gr.Accordion("Chat Settings", open=False):              
+                textbox_systemMessage_rr = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
             checkbox_Stream_rr = gr.Checkbox(label="Streaming", value=True)
             interface = gr.ChatInterface(fn=chat_bot,
                                 chatbot= gr.Chatbot(likeable=False,
@@ -846,22 +769,21 @@ with gr.Blocks(title="Build and Run Recursive Retriever Index",analytics_enabled
 app = gr.mount_gradio_app(app, custom_theme_rrIndexV2, path="/buildrunrrindex")
 
 
-with gr.Blocks(title="Build and Run Knowledge Graph Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_indexV2:
+with gr.Blocks(title="Build and Run Knowledge Graph Index",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_indexV2:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     input_indexname_kg = gr.Textbox(label="Index Name",placeholder= "Knowledge Graph Index folder path generated by Index building",lines=1)   
-    with gr.Row():
-        with gr.Column(scale=1): 
-            with gr.Row():
+    with gr.Tab("Build Index"):             
                 downloadbutton_kg = gr.DownloadButton(label="Download Index")
                 interface = gr.Interface(fn=build_index, inputs=["file"], outputs=["markdown",downloadbutton_kg],allow_flagging="never",analytics_enabled=False)
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-            with gr.Row():
+    with gr.Tab("View Index"):
                 downloadgraphviewbutton = gr.DownloadButton(label="Download Graph View")
                 interface = gr.Interface(fn=view_graph, inputs=[input_indexname_kg], outputs=["markdown",downloadgraphviewbutton],allow_flagging="never",analytics_enabled=False)
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-        with gr.Column(scale=2):
-            radtio_options_kg = gr.Radio([KNOWLEDGE_GRAPH], label="Index Type", value=KNOWLEDGE_GRAPH, visible=False)            
-            textbox_systemMessage_kg = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+    with gr.Tab("Chat Mode"):
+            radtio_options_kg = gr.Radio([KNOWLEDGE_GRAPH], label="Index Type", value=KNOWLEDGE_GRAPH, visible=False)
+            with gr.Accordion("Chat Settings", open=False):              
+                textbox_systemMessage_kg = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
             checkbox_Stream_kg = gr.Checkbox(label="Streaming", value=True)
             interface = gr.ChatInterface(fn=chat_bot,
                                 chatbot= gr.Chatbot(likeable=False,
@@ -878,19 +800,17 @@ with gr.Blocks(title="Build and Run Knowledge Graph Index",analytics_enabled=Fal
 app = gr.mount_gradio_app(app, custom_theme_indexV2, path="/buildrunragindex")
 
 
-with gr.Blocks(title="Build and Run MS GraphRAG Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_GraphRAGIndexV2:
-    
-    
-    with gr.Row():
-        with gr.Column(scale=1): 
-            textbox_GraphRAGStorageName_msrag =  gr.Textbox(lines=1, label="MS GraphRAG Storage Name", value="msgrag01")
-            textbox_GraphRAGIndex_msrag =  gr.Textbox(lines=1, label="MS GraphRAG Index Name", value="msgrag01")
+with gr.Blocks(title="Build and Run MS GraphRAG Index",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_GraphRAGIndexV2:
+    textbox_GraphRAGIndex_msrag =  gr.Textbox(lines=1, label="MS GraphRAG Index Name", value="msgrag01")
+    with gr.Tab("Build Index"): 
+            textbox_GraphRAGStorageName_msrag =  gr.Textbox(lines=1, label="MS GraphRAG Storage Name", value="msgrag01")            
             interface = gr.Interface(fn=build_GraghRAG_index, inputs=["file",textbox_GraphRAGStorageName_msrag, textbox_GraphRAGIndex_msrag], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
 
-        with gr.Column(scale=2):
-            radtio_options_msrag = gr.Radio([MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL], label="Index Type", value=MS_GRAPHRAG_LOCAL)            
-            textbox_systemMessage_msrag = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+    with gr.Tab("Chat Mode"):
+            radtio_options_msrag = gr.Radio([MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL], label="Index Type", value=MS_GRAPHRAG_LOCAL)
+            with gr.Accordion("Chat Settings", open=False):              
+                textbox_systemMessage_msrag = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
             checkbox_Stream_msrag = gr.Checkbox(label="Streaming", value=True)
             interface = gr.ChatInterface(fn=chat_bot,
                                 chatbot= gr.Chatbot(likeable=False,
