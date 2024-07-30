@@ -719,9 +719,6 @@ with gr.Blocks(title="Build MS GraphRAG Index",analytics_enabled=False, css="foo
 
 app = gr.mount_gradio_app(app, custom_theme_GraghRAGIndex, path="/buildGraghRAGindex")
 
-
-'''
-
 with gr.Blocks(title="Build Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_summaryIndex:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     downloadSummarybutton = gr.DownloadButton(label="Download Index")
@@ -756,39 +753,42 @@ with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="foot
 
 
 app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
+'''
+
+
 
 
 
 with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_AzureSearchV2:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
-   
-    with gr.Row():
-        with gr.Column(scale=1): 
-            input_indexname_azuresearch = gr.Textbox("azuresearch_0",lines=1)           
-            input_file_azuresearch = gr.File()
-            output_markdown_azuresearch = gr.Markdown()
-            interface=gr.Interface(fn=build_azure_index, inputs=[input_indexname_azuresearch,input_file_azuresearch], outputs=[output_markdown_azuresearch],
-                         allow_flagging="never",
-                         analytics_enabled=False,
-                         submit_btn="Build Index")
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-        with gr.Column(scale=2):    
-            radtio_ptions_azuresearch = gr.Radio([AZURE_AI_SEARCH], label="Index Type", value="Azure AI Search", visible=False)            
-            textbox_systemMessage_azuresearch = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
-            checkbox_Stream_azuresearch = gr.Checkbox(label="Streaming", value=True)
-            interface=gr.ChatInterface(fn=chat_bot,
-                                chatbot= gr.Chatbot(likeable=False,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        ),
-                                additional_inputs=[radtio_ptions_azuresearch, input_indexname_azuresearch, textbox_systemMessage_azuresearch, checkbox_Stream_azuresearch], 
-                                submit_btn="Chat",                                
-                                examples = [["provide summary for the document"],["give me insights of the document"]])
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
+       input_indexname_azuresearch = gr.Textbox("azuresearch_0",lines=1)  
+       with gr.Accordion("Build Index", open=False):
+                         
+                input_file_azuresearch = gr.File()
+                output_markdown_azuresearch = gr.Markdown()
+                interface=gr.Interface(fn=build_azure_index, inputs=[input_indexname_azuresearch,input_file_azuresearch], outputs=[output_markdown_azuresearch],
+                            allow_flagging="never",
+                            analytics_enabled=False,
+                            submit_btn="Build Index")
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
+       with gr.Accordion("Chat Mode", open=False):
+                radtio_ptions_azuresearch = gr.Radio([AZURE_AI_SEARCH], label="Index Type", value="Azure AI Search", visible=False)
+                with gr.Accordion("Chat Settings", open=False):            
+                    textbox_systemMessage_azuresearch = gr.Textbox("You are helpful AI.", label="System Message",visible=True, lines=5)
+                checkbox_Stream_azuresearch = gr.Checkbox(label="Streaming", value=True)
+                interface=gr.ChatInterface(fn=chat_bot,
+                                    chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                                    additional_inputs=[radtio_ptions_azuresearch, input_indexname_azuresearch, textbox_systemMessage_azuresearch, checkbox_Stream_azuresearch], 
+                                    submit_btn="Chat",                                
+                                    examples = [["provide summary for the document"],["give me insights of the document"]])
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
 
-    app = gr.mount_gradio_app(app, custom_theme_AzureSearchV2, path="/buildrunazureindex")
+       app = gr.mount_gradio_app(app, custom_theme_AzureSearchV2, path="/buildrunazureindex")
 
 
 with gr.Blocks(title="Build and Run Summary Index",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_summaryIndexV2:

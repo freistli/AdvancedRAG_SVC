@@ -76,12 +76,12 @@
         </script>
     </head>
     <body >
-        <h1>Advanced RAG AI Service</h1>
+        <h1>Advanced RAG AI Service Powered by GPT-4o</h1>
         <!--mgt-login></mgt-login-->
         <div id="main">
             <div class="button-container">
-                <button class="tab-button active" onclick="openTab('advchatbot')">Chat Mode</button>                           
-                <button class="tab-button" onclick="openTab('buildazureindex')">Azure AI Search Index</button>
+                <button class="tab-button" onclick="openTab('advchatbot')" style="display: none;">Chat Mode</button>                           
+                <button class="tab-button active" onclick="openTab('buildazureindex')">Azure AI Search Index</button>
                 <button class="tab-button" onclick="openTab('buildGraghRAGindex')">MS GraphRAG Index</button>
                 <button class="tab-button" onclick="openTab('buildragindex')">Knowledge Graph Index</button>
                 <button class="tab-button" onclick="openTab('viewgraph')" style="display: none;">View Knowledge Graph Index</button> 
@@ -90,7 +90,7 @@
                 <button class="tab-button" onclick="openTab('proofread')" >Proofread</button>
                 <button class="tab-button" onclick="openTab('advproofread')">Advanced Proofread</button>     
             </div>
-            <div id="advchatbot" class="tab active">
+            <div id="advchatbot" class="tab" style="display: none;">
                 <iframe src="/advchatbot/"></iframe>
             </div>
             <div id="proofread" class="tab">
@@ -99,7 +99,7 @@
             <div id="advproofread" class="tab">
                 <iframe src="/advproofread/"></iframe>
             </div>
-            <div id="buildazureindex" class="tab">
+            <div id="buildazureindex" class="tab active">
                 <iframe src="/buildrunazureindex/"></iframe>
             </div>
             <div id="buildragindex" class="tab">
@@ -116,7 +116,7 @@
                 <iframe src="/buildrunrrindex/"></iframe>
             </div>
             <div id="buildsummaryindex" class="tab">
-                <iframe src="/buildsummaryindex/"></iframe>
+                <iframe src="/buildrunsummaryindex/"></iframe>
             </div>
             
         </div>
