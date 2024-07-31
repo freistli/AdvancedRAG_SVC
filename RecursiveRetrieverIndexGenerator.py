@@ -13,6 +13,7 @@ import shutil
 import sys
 import tempfile
 import time
+import Common
 from langchain_text_splitters import MarkdownTextSplitter
 from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
 from llama_index.llms.azure_openai import AzureOpenAI
@@ -214,32 +215,39 @@ class RecursiveRetrieverIndexGenerator:
                 yield [partialMessage, zipFile]
             else:
                 layoutJson = self.index_persist_dir + "/"+Path(self.docPath).stem+".json"
-                # Load the document and analyze the layout from online service
-                if not os.path.exists(layoutJson):
-                    with open(self.docPath, 'rb') as file:
-                        file_content = file.read()
-                    partialMessage += '\n\nAnalyzing document layout from online service'
-                    logging.info(partialMessage)
-                    yield [partialMessage,"Pending"]
+                isText = False
+                common = Common.Common(self.docPath)
+                isText = common.isTextFile()
 
-                    layoutDocs = self.docClient.begin_analyze_document(
-                        "prebuilt-layout",
-                        analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                        output_content_format="markdown"
-                    )        
-                    docs_string = layoutDocs.result().content
-                    with open(layoutJson, 'w') as json_file:
-                        json.dump(layoutDocs.result().content, json_file)
-                    partialMessage += '\n\nDocument layout saved to ' + layoutJson
-                    logging.info(partialMessage)
-                    yield [partialMessage,"Pending"]
-                # Load the document and analyze the layout from local file
+                if isText is not True:
+                    # Load the document and analyze the layout from online service
+                    if not os.path.exists(layoutJson):
+                        with open(self.docPath, 'rb') as file:
+                            file_content = file.read()
+                        partialMessage += '\n\nAnalyzing document layout from online service'
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
+
+                        layoutDocs = self.docClient.begin_analyze_document(
+                            "prebuilt-layout",
+                            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                            output_content_format="markdown"
+                        )        
+                        docs_string = layoutDocs.result().content
+                        with open(layoutJson, 'w') as json_file:
+                            json.dump(layoutDocs.result().content, json_file)
+                        partialMessage += '\n\nDocument layout saved to ' + layoutJson
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
+                    # Load the document and analyze the layout from local file
+                    else:
+                        with open(layoutJson) as json_file:
+                            docs_string = json.load(json_file)  
+                        partialMessage += '\n\nDocument layout loaded from ' + layoutJson
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
                 else:
-                    with open(layoutJson) as json_file:
-                        docs_string = json.load(json_file)  
-                    partialMessage += '\n\nDocument layout loaded from ' + layoutJson
-                    logging.info(partialMessage)
-                    yield [partialMessage,"Pending"]
+                    docs_string = open(self.docPath, 'r').read()
                         
                 docs = [Document(text=docs_string)]
                 base_nodes = Settings.node_parser.get_nodes_from_documents(docs)                

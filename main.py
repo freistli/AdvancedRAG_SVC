@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import Common
 from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse, RedirectResponse
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
@@ -398,16 +399,24 @@ def proof_read (Graph, QueryRules, Content: str = "" ,Draft: str = "", max_entit
         
     elif str(Draft).strip() != "":
         print(Draft)
-        with open(Draft, 'rb') as file:
-            file_content = file.read()
+        isText = False
+        common = Common.Common(Draft)
+        isText = common.isTextFile()
 
-        to_be_proofread_content = docClient.begin_analyze_document(
-            "prebuilt-layout",
-            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-            output_content_format="markdown"
-        )
+        if isText is not True:
+            with open(Draft, 'rb') as file:
+                file_content = file.read()
 
-        docs_string = to_be_proofread_content.result().content
+            to_be_proofread_content = docClient.begin_analyze_document(
+                "prebuilt-layout",
+                analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                output_content_format="markdown"
+            )
+
+            docs_string = to_be_proofread_content.result().content
+        else:
+            with open(Draft, 'r') as file:
+                docs_string = file.read()
 
         #textSplitter = CharacterTextSplitter(chunk_size=350, separator="\n", is_separator_regex=False)
         #to_be_proofread_content_list = textSplitter.split_text(docs_string)        
@@ -828,4 +837,4 @@ app = gr.mount_gradio_app(app, custom_theme_GraphRAGIndexV2, path="/buildrunGrap
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # For Windows support
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False, workers=40)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False, workers=1)

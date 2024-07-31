@@ -13,6 +13,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import Common
 from langchain_text_splitters import MarkdownTextSplitter
 from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
 from llama_index.llms.azure_openai import AzureOpenAI
@@ -212,28 +213,40 @@ class AzureAISearchIndexGenerator:
                 self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
 
                 layoutJson = self.persist_dir + "/"+Path(self.docPath).stem+".json"
-                # Load the document and analyze the layout from online service
-                if not os.path.exists(layoutJson):
-                    with open(self.docPath, 'rb') as file:
-                        file_content = file.read()
 
-                        layoutDocs = self.docClient.begin_analyze_document(
-                            "prebuilt-layout",
-                            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                            output_content_format="markdown"
-                        )        
-                        docs_string = layoutDocs.result().content
-                        with open(layoutJson, 'w') as json_file:
-                            json.dump(layoutDocs.result().content, json_file)
-                        partialMessage += 'Layout analysis result saved to ' + layoutJson + "\n"
+                isText = False
+                common = Common.Common(self.docPath)
+                isText = common.isTextFile()
+
+                if isText is not True:
+                    # Load the document and analyze the layout from online service
+                    if not os.path.exists(layoutJson):
+                        with open(self.docPath, 'rb') as file:
+                            file_content = file.read()
+
+                            layoutDocs = self.docClient.begin_analyze_document(
+                                "prebuilt-layout",
+                                analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                                output_content_format="markdown"
+                            )        
+                            docs_string = layoutDocs.result().content
+                            with open(layoutJson, 'w') as json_file:
+                                json.dump(layoutDocs.result().content, json_file)
+                            partialMessage += 'Layout analysis result saved to ' + layoutJson + "\n"
+                            logging.info(partialMessage)
+                            yield partialMessage
+
+                        # Load the document and analyze the layout from local file
+                    else:
+                        with open(layoutJson) as json_file:
+                            docs_string = json.load(json_file) 
+                        partialMessage += 'Layout analysis result loaded from ' + layoutJson + "\n"
                         logging.info(partialMessage)
                         yield partialMessage
-
-                    # Load the document and analyze the layout from local file
                 else:
-                    with open(layoutJson) as json_file:
-                        docs_string = json.load(json_file) 
-                    partialMessage += 'Layout analysis result loaded from ' + layoutJson + "\n"
+                    with open(self.docPath, 'r') as file:
+                        docs_string = file.read()
+                    partialMessage += 'Text file loaded from ' + self.docPath + "\n"
                     logging.info(partialMessage)
                     yield partialMessage
 

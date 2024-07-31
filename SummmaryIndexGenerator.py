@@ -13,6 +13,7 @@ import shutil
 import sys
 import tempfile
 import time
+import Common
 from langchain_text_splitters import MarkdownTextSplitter
 from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
 from llama_index.llms.azure_openai import AzureOpenAI
@@ -142,7 +143,7 @@ class SummaryIndexGenerator:
         self.index = None
 
         self.response_synthesizer = get_response_synthesizer(
-            response_mode="tree_summarize", use_async=True, streaming=True
+            response_mode="tree_summarize", use_async=False, streaming=True
         )
     
 
@@ -212,30 +213,41 @@ class SummaryIndexGenerator:
                 yield [partialMessage, zipFile]
             else:
                 layoutJson = self.index_persist_dir + "/"+Path(self.docPath).stem+".json"
-                # Load the document and analyze the layout from online service
-                if not os.path.exists(layoutJson):
-                    with open(self.docPath, 'rb') as file:
-                        file_content = file.read()
-                    partialMessage += '\n\nAnalyzing document layout from online service'
-                    logging.info(partialMessage)
-                    yield [partialMessage,"Pending"]
+                isText = False
+                common = Common.Common(self.docPath)
+                isText = common.isTextFile()
 
-                    layoutDocs = self.docClient.begin_analyze_document(
-                        "prebuilt-layout",
-                        analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                        output_content_format="markdown"
-                    )        
-                    docs_string = layoutDocs.result().content
-                    with open(layoutJson, 'w') as json_file:
-                        json.dump(layoutDocs.result().content, json_file)
-                    partialMessage += '\n\nDocument layout saved to ' + layoutJson
-                    logging.info(partialMessage)
-                    yield [partialMessage,"Pending"]
-                # Load the document and analyze the layout from local file
+                if isText is not True:                    
+                    # Load the document and analyze the layout from online service
+                    if not os.path.exists(layoutJson):
+                        with open(self.docPath, 'rb') as file:
+                            file_content = file.read()
+                        partialMessage += '\n\nAnalyzing document layout from online service'
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
+
+                        layoutDocs = self.docClient.begin_analyze_document(
+                            "prebuilt-layout",
+                            analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                            output_content_format="markdown"
+                        )        
+                        docs_string = layoutDocs.result().content
+                        with open(layoutJson, 'w') as json_file:
+                            json.dump(layoutDocs.result().content, json_file)
+                        partialMessage += '\n\nDocument layout saved to ' + layoutJson
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
+                    # Load the document and analyze the layout from local file
+                    else:
+                        with open(layoutJson) as json_file:
+                            docs_string = json.load(json_file)  
+                        partialMessage += '\n\nDocument layout loaded from ' + layoutJson
+                        logging.info(partialMessage)
+                        yield [partialMessage,"Pending"]
                 else:
-                    with open(layoutJson) as json_file:
-                        docs_string = json.load(json_file)  
-                    partialMessage += '\n\nDocument layout loaded from ' + layoutJson
+                    with open(self.docPath, 'r') as file:
+                        docs_string = file.read()
+                    partialMessage += '\n\nDocument loaded from ' + self.docPath
                     logging.info(partialMessage)
                     yield [partialMessage,"Pending"]
                         
@@ -244,13 +256,15 @@ class SummaryIndexGenerator:
                 
                 
                 partialMessage += '\n\nGenerating index'
+                yield [partialMessage,"Pending"]
+
                 docstore = SimpleDocumentStore()
                 if os.path.exists(self.index_persist_dir+"/docstore.json"):
                     storage_context = StorageContext.from_defaults(docstore=docstore,persist_dir=self.index_persist_dir)
                 else:
                     storage_context = StorageContext.from_defaults(docstore=docstore)     
 
-                synthesizer = get_response_synthesizer(response_mode="tree_summarize", use_async=True)
+                synthesizer = get_response_synthesizer(response_mode="tree_summarize", use_async=False)
 
                 doc_summary_index = DocumentSummaryIndex.from_documents(
                     docs,
@@ -273,7 +287,7 @@ class SummaryIndexGenerator:
                 yield [partialMessage, zipFile]
 
         except Exception as e:
-            partialMessage += '\n\nError generating index'
+            partialMessage += '\n\nError generating index: ' + e.__str__()
             logging.error(partialMessage)
             print(e)
             yield [partialMessage,"None"]
@@ -287,7 +301,7 @@ class SummaryIndexGenerator:
 
 
     def TestSummary(self):
-        self.query_engine = self.index.as_query_engine(self.llm,streaming=True,response_mode="tree_summarize", use_async=True)
+        self.query_engine = self.index.as_query_engine(self.llm,streaming=True,response_mode="tree_summarize", use_async=False)
         response = self.query_engine.query("Give a summary of the document")
         partialMessage = ""
         for text in response.response_gen:
@@ -329,7 +343,7 @@ class SummaryIndexGenerator:
             '''
             self.query_engine = RetrieverQueryEngine.from_args(retriever=retriever, llm=self.llm, streaming=True, 
                                                                response_synthesizer=self.response_synthesizer,
-                                                               use_async=True)
+                                                               use_async=False)
 
             response_stream = self.query_engine.query(query)
             

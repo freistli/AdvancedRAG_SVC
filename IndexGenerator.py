@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 import time
 
+import Common
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
 from langchain.text_splitter import MarkdownHeaderTextSplitter,MarkdownTextSplitter
@@ -171,25 +172,31 @@ class IndexGenerator:
         else:  
             layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
 
-            # Load the document and analyze the layout from online service
-            if not os.path.exists(layoutJson):
-                with open(ruleFilePath, 'rb') as file:
-                    file_content = file.read()
+            isText = False
+            common = Common.Common(self.docPath)
+            isText = common.isTextFile()
 
-                layoutDocs = docClient.begin_analyze_document(
-                    "prebuilt-layout",
-                    analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
-                    output_content_format="markdown"
-                )        
-                docs_string = layoutDocs.result().content
-                with open(layoutJson, 'w') as json_file:
-                    json.dump(layoutDocs.result().content, json_file)
+            if isText is not True:
+                # Load the document and analyze the layout from online service
+                if not os.path.exists(layoutJson):
+                    with open(ruleFilePath, 'rb') as file:
+                        file_content = file.read()
 
-            # Load the document and analyze the layout from local file
+                    layoutDocs = docClient.begin_analyze_document(
+                        "prebuilt-layout",
+                        analyze_request=AnalyzeDocumentRequest(bytes_source=file_content),
+                        output_content_format="markdown"
+                    )        
+                    docs_string = layoutDocs.result().content
+                    with open(layoutJson, 'w') as json_file:
+                        json.dump(layoutDocs.result().content, json_file)
+                # Load the document and analyze the layout from local file
+                else:
+                    with open(layoutJson) as json_file:
+                        docs_string = json.load(json_file) 
             else:
-                with open(layoutJson) as json_file:
-                    docs_string = json.load(json_file)  
-
+                with open(ruleFilePath, 'r') as file:
+                    docs_string = file.read()
 
             splitter = MarkdownTextSplitter.from_tiktoken_encoder(chunk_size=300)
             rules_content_list = splitter.split_text(docs_string)  
