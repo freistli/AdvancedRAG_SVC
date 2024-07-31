@@ -123,6 +123,8 @@ KNOWLEDGE_GRAPH = "Knowledge Graph"
 RECURSIVE_RETRIEVER = "Recursive Retriever"
 SUMMARY_INDEX = "Summary Index"
 
+individual_chat = False
+
 class FineTune:
     def __init__(self,  max_entities: int = 5, max_synonyms: int = 5,graph_traversal_depth: int = 2, max_knowledge_sequence: int = 30):    
         self.graph_traversal_depth = graph_traversal_depth
@@ -645,6 +647,38 @@ def print_like_dislike(x: gr.LikeData):
 
 modelName = "Azure OpenAI GPT-4o"
 
+if individual_chat is False:
+    with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme_ChatBot:
+        #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
+        with gr.Row():    
+            with gr.Column(scale=1):
+                with gr.Accordion("Chatbot Configuration", open=True):
+                    checkbox_Stream = gr.Checkbox(label="Streaming", value=True)
+                    radtio_ptions = gr.Radio([AZURE_AI_SEARCH,MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL,KNOWLEDGE_GRAPH,RECURSIVE_RETRIEVER, SUMMARY_INDEX], label="Index Type", value="Azure AI Search")
+                    textbox_index = gr.Textbox("azuresearch_0", label="Search Index Name, can be index folders or Azure AI Search Index Name")
+            with gr.Column(scale=3): 
+                chatbot = gr.Chatbot(likeable=True,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            )
+                chatbot.like(print_like_dislike,None, None)       
+                textbox_systemMessage = gr.Textbox(default_system_message, label="System Message",visible=True, lines=9)            
+                interface = gr.ChatInterface(fn=chat_bot,
+                                chatbot=chatbot,
+                                additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage, checkbox_Stream], 
+                                submit_btn="Chat",                             
+                                examples = [["provide summary for the document"],["give me insights of the document"]])  
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)  
+
+    app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
+else:
+     with gr.Blocks(title=f"Chat with {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme_ChatBot:
+        gr.Label("Chat Mode is now configured into Each Index Tab")
+     app = gr.mount_gradio_app(app, custom_theme_ChatBot, path="/advchatbot")
+    
+
 with gr.Blocks(title=f"Advanced Proofreading by {modelName}",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme:
     #interface = gr.Interface(fn=proof_read, inputs=["file"],outputs="markdown",css="footer{display:none !important}",allow_flagging="never")
     max_entities = gr.Slider(label="Max Entities", value=5, minimum=1, maximum=10, step=1)
@@ -703,22 +737,24 @@ with gr.Blocks(title="Build and Run Index on Azure AI Search",analytics_enabled=
                             analytics_enabled=False,
                             submit_btn="Build Index")
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-       with gr.Tab("Chat Mode"):
-                radtio_ptions_azuresearch = gr.Radio([AZURE_AI_SEARCH], label="Index Type", value="Azure AI Search", visible=False)
-                with gr.Accordion("Chat Settings", open=False):            
-                    textbox_systemMessage_azuresearch = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
-                checkbox_Stream_azuresearch = gr.Checkbox(label="Streaming", value=True)
-                interface=gr.ChatInterface(fn=chat_bot,
-                                    chatbot= gr.Chatbot(likeable=False,
-                                            show_share_button=False, 
-                                            show_copy_button=True, 
-                                            bubble_full_width = False,
-                                            render=True
-                                            ),
-                                    additional_inputs=[radtio_ptions_azuresearch, input_indexname_azuresearch, textbox_systemMessage_azuresearch, checkbox_Stream_azuresearch], 
-                                    submit_btn="Chat",                                
-                                    examples = [["provide summary for the document"],["give me insights of the document"]])
-                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
+
+       if individual_chat is True: 
+            with gr.Tab("Chat Mode"):
+                        radtio_ptions_azuresearch = gr.Radio([AZURE_AI_SEARCH], label="Index Type", value="Azure AI Search", visible=False)
+                        with gr.Accordion("Chat Settings", open=False):            
+                            textbox_systemMessage_azuresearch = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+                        checkbox_Stream_azuresearch = gr.Checkbox(label="Streaming", value=True)
+                        interface=gr.ChatInterface(fn=chat_bot,
+                                            chatbot= gr.Chatbot(likeable=False,
+                                                    show_share_button=False, 
+                                                    show_copy_button=True, 
+                                                    bubble_full_width = False,
+                                                    render=True
+                                                    ),
+                                            additional_inputs=[radtio_ptions_azuresearch, input_indexname_azuresearch, textbox_systemMessage_azuresearch, checkbox_Stream_azuresearch], 
+                                            submit_btn="Chat",                                
+                                            examples = [["provide summary for the document"],["give me insights of the document"]])
+                        interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
 
        app = gr.mount_gradio_app(app, custom_theme_AzureSearchV2, path="/buildrunazureindex")
 
@@ -729,23 +765,25 @@ with gr.Blocks(title="Build and Run Summary Index",analytics_enabled=False, css=
             downloadbutton_summary = gr.DownloadButton(label="Download Index")
             interface = gr.Interface(fn=build_Summary_index, inputs=["file"], outputs=["markdown",downloadbutton_summary],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-    with gr.Tab("Chat Mode"):   
-            radtio_ptions_summary = gr.Radio([SUMMARY_INDEX], label="Index Type", value=SUMMARY_INDEX, visible=False)   
-            with gr.Accordion("Chat Settings", open=False):           
-                textbox_systemMessage_summary = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
-            checkbox_Stream_summary = gr.Checkbox(label="Streaming", value=True)
-            interface=gr.ChatInterface(fn=chat_bot,
-                                chatbot= gr.Chatbot(likeable=False,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        ),
-                                additional_inputs=[radtio_ptions_summary, input_indexname_summary, textbox_systemMessage_summary, checkbox_Stream_summary], 
-                                submit_btn="Chat",                                    
-                                concurrency_limit="default" ,                             
-                                examples = [["provide summary for the document"],["give me insights of the document"]])
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)  
+
+    if individual_chat is True: 
+        with gr.Tab("Chat Mode"):   
+                radtio_ptions_summary = gr.Radio([SUMMARY_INDEX], label="Index Type", value=SUMMARY_INDEX, visible=False)   
+                with gr.Accordion("Chat Settings", open=False):           
+                    textbox_systemMessage_summary = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+                checkbox_Stream_summary = gr.Checkbox(label="Streaming", value=True)
+                interface=gr.ChatInterface(fn=chat_bot,
+                                    chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                                    additional_inputs=[radtio_ptions_summary, input_indexname_summary, textbox_systemMessage_summary, checkbox_Stream_summary], 
+                                    submit_btn="Chat",                                    
+                                    concurrency_limit="default" ,                             
+                                    examples = [["provide summary for the document"],["give me insights of the document"]])
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)  
 
     app = gr.mount_gradio_app(app, custom_theme_summaryIndexV2, path="/buildrunsummaryindex")
 
@@ -757,22 +795,24 @@ with gr.Blocks(title="Build and Run Recursive Retriever Index",analytics_enabled
             NodeReferenceCheckBox_rr = gr.Checkbox(label="Node Reference", value=False)
             interface = gr.Interface(fn=build_RecursiveRetriever_index, inputs=["file",NodeReferenceCheckBox_rr], outputs=["markdown",downloadbutton_rr],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-    with gr.Tab("Chat Mode"):
-            radtio_options_rr = gr.Radio([RECURSIVE_RETRIEVER], label="Index Type", value=RECURSIVE_RETRIEVER, visible=False)
-            with gr.Accordion("Chat Settings", open=False):              
-                textbox_systemMessage_rr = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
-            checkbox_Stream_rr = gr.Checkbox(label="Streaming", value=True)
-            interface = gr.ChatInterface(fn=chat_bot,
-                                chatbot= gr.Chatbot(likeable=False,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        ),
-                                additional_inputs=[radtio_options_rr, input_indexname_rr, textbox_systemMessage_rr, checkbox_Stream_rr], 
-                                submit_btn="Chat",                                
-                                examples = [["provide summary for the document"],["give me insights of the document"]])
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)    
+
+    if individual_chat is True:
+        with gr.Tab("Chat Mode"):
+                radtio_options_rr = gr.Radio([RECURSIVE_RETRIEVER], label="Index Type", value=RECURSIVE_RETRIEVER, visible=False)
+                with gr.Accordion("Chat Settings", open=False):              
+                    textbox_systemMessage_rr = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+                checkbox_Stream_rr = gr.Checkbox(label="Streaming", value=True)
+                interface = gr.ChatInterface(fn=chat_bot,
+                                    chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                                    additional_inputs=[radtio_options_rr, input_indexname_rr, textbox_systemMessage_rr, checkbox_Stream_rr], 
+                                    submit_btn="Chat",                                
+                                    examples = [["provide summary for the document"],["give me insights of the document"]])
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)    
 
 
 app = gr.mount_gradio_app(app, custom_theme_rrIndexV2, path="/buildrunrrindex")
@@ -789,22 +829,23 @@ with gr.Blocks(title="Build and Run Knowledge Graph Index",analytics_enabled=Fal
                 downloadgraphviewbutton = gr.DownloadButton(label="Download Graph View")
                 interface = gr.Interface(fn=view_graph, inputs=[input_indexname_kg], outputs=["markdown",downloadgraphviewbutton],allow_flagging="never",analytics_enabled=False)
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-    with gr.Tab("Chat Mode"):
-            radtio_options_kg = gr.Radio([KNOWLEDGE_GRAPH], label="Index Type", value=KNOWLEDGE_GRAPH, visible=False)
-            with gr.Accordion("Chat Settings", open=False):              
-                textbox_systemMessage_kg = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
-            checkbox_Stream_kg = gr.Checkbox(label="Streaming", value=True)
-            interface = gr.ChatInterface(fn=chat_bot,
-                                chatbot= gr.Chatbot(likeable=False,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        ),
-                                additional_inputs=[radtio_options_kg, input_indexname_kg, textbox_systemMessage_kg, checkbox_Stream_kg], 
-                                submit_btn="Chat",                                
-                                examples = [["provide summary for the document"],["give me insights of the document"]])  
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
+    if individual_chat is True:
+        with gr.Tab("Chat Mode"):
+                radtio_options_kg = gr.Radio([KNOWLEDGE_GRAPH], label="Index Type", value=KNOWLEDGE_GRAPH, visible=False)
+                with gr.Accordion("Chat Settings", open=False):              
+                    textbox_systemMessage_kg = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+                checkbox_Stream_kg = gr.Checkbox(label="Streaming", value=True)
+                interface = gr.ChatInterface(fn=chat_bot,
+                                    chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                                    additional_inputs=[radtio_options_kg, input_indexname_kg, textbox_systemMessage_kg, checkbox_Stream_kg], 
+                                    submit_btn="Chat",                                
+                                    examples = [["provide summary for the document"],["give me insights of the document"]])  
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
 
 app = gr.mount_gradio_app(app, custom_theme_indexV2, path="/buildrunragindex")
 
@@ -815,23 +856,23 @@ with gr.Blocks(title="Build and Run MS GraphRAG Index",analytics_enabled=False, 
             textbox_GraphRAGStorageName_msrag =  gr.Textbox(lines=1, label="MS GraphRAG Storage Name", value="msgrag01")            
             interface = gr.Interface(fn=build_GraghRAG_index, inputs=["file",textbox_GraphRAGStorageName_msrag, textbox_GraphRAGIndex_msrag], outputs=["markdown"],allow_flagging="never",analytics_enabled=False)
             interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
-
-    with gr.Tab("Chat Mode"):
-            radtio_options_msrag = gr.Radio([MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL], label="Index Type", value=MS_GRAPHRAG_LOCAL)
-            with gr.Accordion("Chat Settings", open=False):              
-                textbox_systemMessage_msrag = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
-            checkbox_Stream_msrag = gr.Checkbox(label="Streaming", value=True)
-            interface = gr.ChatInterface(fn=chat_bot,
-                                chatbot= gr.Chatbot(likeable=False,
-                                        show_share_button=False, 
-                                        show_copy_button=True, 
-                                        bubble_full_width = False,
-                                        render=True
-                                        ),
-                                additional_inputs=[radtio_options_msrag, textbox_GraphRAGIndex_msrag, textbox_systemMessage_msrag, checkbox_Stream_msrag], 
-                                submit_btn="Chat",                              
-                                examples = [["provide summary for the document"],["give me insights of the document"]])
-            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)   
+    if individual_chat is True:
+        with gr.Tab("Chat Mode"):
+                radtio_options_msrag = gr.Radio([MS_GRAPHRAG_LOCAL,MS_GRAPHRAG_GLOBAL], label="Index Type", value=MS_GRAPHRAG_LOCAL)
+                with gr.Accordion("Chat Settings", open=False):              
+                    textbox_systemMessage_msrag = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+                checkbox_Stream_msrag = gr.Checkbox(label="Streaming", value=True)
+                interface = gr.ChatInterface(fn=chat_bot,
+                                    chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                                    additional_inputs=[radtio_options_msrag, textbox_GraphRAGIndex_msrag, textbox_systemMessage_msrag, checkbox_Stream_msrag], 
+                                    submit_btn="Chat",                              
+                                    examples = [["provide summary for the document"],["give me insights of the document"]])
+                interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)   
 
 app = gr.mount_gradio_app(app, custom_theme_GraphRAGIndexV2, path="/buildrunGraphRAGindex")
 

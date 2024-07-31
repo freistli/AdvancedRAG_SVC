@@ -173,7 +173,7 @@ class IndexGenerator:
             layoutJson = persist_dir + "/"+Path(ruleFilePath).stem+".json"
 
             isText = False
-            common = Common.Common(self.docPath)
+            common = Common.Common(ruleFilePath)
             isText = common.isTextFile()
 
             if isText is not True:
