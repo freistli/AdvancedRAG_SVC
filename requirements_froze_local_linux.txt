@@ -24,3 +24,4 @@ llama-index-llms-fireworks==0.1.5
 tqdm==4.66.4
 python-magic==0.4.27
 libmagic==1.0
+llama-index-experimental==0.1.3

@@ -51,6 +51,7 @@ from llama_index.core.retrievers import KnowledgeGraphRAGRetriever
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from llama_index.core.callbacks import LlamaDebugHandler
 import tiktoken
+import DataFrameAnalysis
 from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
 from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
 from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
@@ -122,6 +123,7 @@ MS_GRAPHRAG_GLOBAL = "MS GraghRAG Global"
 KNOWLEDGE_GRAPH = "Knowledge Graph"
 RECURSIVE_RETRIEVER = "Recursive Retriever"
 SUMMARY_INDEX = "Summary Index"
+CSV_AI_ANALYSIS = "CSV AI Analysis"
 
 individual_chat = False
 
@@ -627,7 +629,16 @@ def chat_bot(message, history, indexType, indexName, systemMessage, streaming: b
         result = summaryIndexGenerator.LoadIndex(indexFolder=indexName)
         for text in result:
             pass
-        response = summaryIndexGenerator.SummaryRetrieverSearch(str(history_openai_format))        
+        response = summaryIndexGenerator.SummaryRetrieverSearch(str(history_openai_format))  
+
+    elif indexType == CSV_AI_ANALYSIS:
+        dfa = DataFrameAnalysis.DataFrameAnalysis(indexName)
+        dfa.load_data()
+        status = "Data loaded successfully: " + indexName
+        partial_message = ""
+        print(status)
+        response = dfa.query_data(str(history_openai_format))       
+          
 
     if response is not None:
         if streaming == True:
@@ -643,6 +654,16 @@ def chat_bot(message, history, indexType, indexName, systemMessage, streaming: b
 
 def print_like_dislike(x: gr.LikeData):
     print(x.index, x.value, x.liked)
+
+
+def CSV_Load(file):
+    dfa = DataFrameAnalysis.DataFrameAnalysis(file)
+    dfa.load_data()
+    status = "Data loaded successfully: " + file
+    partial_message = ""
+    print(status)
+    partial_message += status
+    yield file,partial_message
 
 
 modelName = "Azure OpenAI GPT-4o"
@@ -875,6 +896,37 @@ with gr.Blocks(title="Build and Run MS GraphRAG Index",analytics_enabled=False, 
                 interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)   
 
 app = gr.mount_gradio_app(app, custom_theme_GraphRAGIndexV2, path="/buildrunGraphRAGindex")
+
+def updateFileName(file):
+     return file
+
+file_upload_csv = gr.File(label="Upload CSV File",file_types=["csv"])
+textbox_csv_file =  gr.Textbox(lines=1, label="CSV File Path") 
+
+with gr.Blocks(title="CSV Query Engine",analytics_enabled=False, css=css, js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) as custom_theme_CSVAnalysis:
+    textbox_csv_chat_file =  gr.Textbox(lines=1, label="CSV File Path for Chat Mode") 
+    with gr.Tab("Upload CSV File"):            
+            interface = gr.Interface(fn=CSV_Load, inputs=[file_upload_csv], outputs=[textbox_csv_file,"markdown"],allow_flagging="never",analytics_enabled=False)
+            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size) 
+            textbox_csv_file.change(updateFileName,textbox_csv_file ,textbox_csv_chat_file)
+    with gr.Tab("Chat Mode"): 
+            with gr.Accordion("Chat Settings", open=False):              
+                    textbox_systemMessage_csv = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)
+            radtio_ptions_csv = gr.Radio([CSV_AI_ANALYSIS], label="Index Type", value=CSV_AI_ANALYSIS, visible=False)           
+            checkbox_Stream_csv = gr.Checkbox(label="Streaming", value=True, visible=False)
+            interface = gr.ChatInterface(fn=chat_bot,
+                        chatbot= gr.Chatbot(likeable=False,
+                                            show_share_button=False, 
+                                            show_copy_button=True, 
+                                            bubble_full_width = False,
+                                            render=True
+                                            ),
+                        additional_inputs=[radtio_ptions_csv, textbox_csv_chat_file, textbox_systemMessage_csv, checkbox_Stream_csv], 
+                        submit_btn="Chat",                              
+                        examples = [["how many records does it have"],["give me insights of the document"]])
+            interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)   
+
+app = gr.mount_gradio_app(app, custom_theme_CSVAnalysis, path="/ChatWithCSV")
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()  # For Windows support
