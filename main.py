@@ -678,7 +678,7 @@ def CSV_Load(file):
     yield file,partial_message
 
 
-modelName = "Azure OpenAI GPT-4o"
+modelName = "Azure OpenAI "+ os.environ['AZURE_OPENAI_Deployment']
 
 if AdvChatBot_Tab is True:
     if Individual_Chat is False:

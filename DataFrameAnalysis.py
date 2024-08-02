@@ -19,7 +19,11 @@ class DataFrameAnalysis:
     
     def load_data(self):
         self.df = pd.read_csv(self.docpath)
-        self.query_engine = PandasQueryEngine(df=self.df, verbose=True,synthesize_response=True)
+
+        pd.set_option("display.max_columns", int(os.environ['Max_Output_Columns']))
+        pd.set_option("display.max_rows", int(os.environ["Max_Output_Rows"]))
+
+        self.query_engine = PandasQueryEngine(df=self.df, verbose=True,synthesize_response=True )
 
     def query_data(self, query):
         response = self.query_engine.query(query)
