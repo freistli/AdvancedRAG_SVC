@@ -295,6 +295,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
             temp_retriever = rules_index.as_retriever(
                 #entity_extract_template="",
                 #synonym_expand_template="",
+                llm=IndexGenerator(ruleFilePath).llm,
                 graph_traversal_depth=fine_tune.graph_traversal_depth,
                 max_entities=fine_tune.max_entities,
                 max_synonyms=fine_tune.max_synonyms,
@@ -303,7 +304,8 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
 
             query_engine = RetrieverQueryEngine.from_args(
                 #graph_rag_retriever,
-                temp_retriever,
+                llm=IndexGenerator(ruleFilePath).llm,
+                retriever=temp_retriever,
                 streaming=True,
                 verbose=True
             )
@@ -349,7 +351,8 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
 
                 rulesPath_query_engine = RetrieverQueryEngine.from_args(
                     #graph_rag_retriever,
-                    temp_retriever,
+                    llm=IndexGenerator(ruleFilePath).llm,
+                    retriever=temp_retriever,
                     streaming=True,
                     verbose=True
                 )
@@ -679,6 +682,10 @@ def CSV_Load(file):
 
 
 modelName = "Azure OpenAI "+ os.environ['AZURE_OPENAI_Deployment']
+if bool(os.environ['USE_LMSTUDIO'] == 'True'):
+    modelName += ", LM-STUDIO "+ os.environ['LLAMACPP_MODEL']
+elif bool(os.environ['USE_OLLAMA'] == 'True'):
+    modelName += ", OLLAMA "+ os.environ['OLLAMA_MODEL']
 
 if AdvChatBot_Tab is True:
     if Individual_Chat is False:

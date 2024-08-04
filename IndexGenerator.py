@@ -44,6 +44,8 @@ import tempfile
 import logging
 from enum import Enum
 import shutil
+from llama_index.llms.ollama import Ollama
+from llama_index.llms.lmstudio import LMStudio
 
 load_dotenv('.env_4_SC')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
@@ -163,6 +165,23 @@ class IndexGenerator:
         self.streamingGradioCallbackHandler = StreamingGradioCallbackHandler()
         self.streamingGradioCallbackHandler.on_llm_start([],[])
 
+        if bool(os.environ['USE_LMSTUDIO'] == 'True'):
+            self.llm = LMStudio(
+                                base_url=os.environ["LLAMACPP_URL"], 
+                                model_name=os.environ["LLAMACPP_MODEL"],  
+                                temperature=0.5,      
+                                max_new_tokens=200,
+                                verbose=True,
+                                is_chat_model=True,
+                                request_timeout=600.0
+                            )
+        elif bool(os.environ['USE_OLLAMA'] == 'True'):
+            self.llm = Ollama(model=os.environ["OLLAMA_MODEL"],
+                               request_timeout=600.0,
+                               base_url=os.environ["OLLAMA_URL"],)
+        else:
+            self.llm = Settings.llm
+
     
     def GenerateKGIndex(self, ruleFilePath, persist_dir, graph_store, use_storage, batch_size):
         # Check if the index is already created and stored in the persist directory
@@ -227,6 +246,7 @@ class IndexGenerator:
             self.streamingGradioCallbackHandler.on_llm_new_token(status)
 
             rules_index = KnowledgeGraphIndex(nodes=nodes[0:10],
+                                              llm=self.llm,
                                             max_triplets_per_chunk=5,
                                             #kg_triple_extract_template=
                                             #kg_triplet_extract_fn=
