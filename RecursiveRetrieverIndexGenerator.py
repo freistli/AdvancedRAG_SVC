@@ -45,6 +45,9 @@ import pickle
 
 import copy
 
+from llama_index.llms.ollama import Ollama
+from llama_index.llms.lmstudio import LMStudio
+
 from llama_index.core.extractors import (
     SummaryExtractor,
     QuestionsAnsweredExtractor,
@@ -147,6 +150,24 @@ class RecursiveRetrieverIndexGenerator:
         self.all_nodes_dict = None
 
         self.index = None
+
+        if bool(os.environ['USE_LMSTUDIO'] == 'True'):
+            self.llm = LMStudio(
+                                base_url=os.environ["LLAMACPP_URL"], 
+                                model_name=os.environ["LLAMACPP_MODEL"],  
+                                temperature=0.5,      
+                                max_new_tokens=200,
+                                verbose=True,
+                                is_chat_model=True,
+                                request_timeout=600.0
+                            )
+        elif bool(os.environ['USE_OLLAMA'] == 'True'):
+            self.llm = Ollama(model=os.environ["OLLAMA_MODEL"],
+                               request_timeout=600.0,
+                               base_url=os.environ["OLLAMA_URL"],)
+            
+        else:
+            self.llm = Settings.llm
     
 
     def LoadIndex(self,indexFolder=""):
@@ -263,8 +284,8 @@ class RecursiveRetrieverIndexGenerator:
                     yield [partialMessage,"Pending"]
 
                     extractors = [
-                        SummaryExtractor(summaries=["self"], show_progress=True),
-                        QuestionsAnsweredExtractor(questions=5, show_progress=True),
+                        SummaryExtractor(llm=self.llm,summaries=["self"], show_progress=True),
+                        QuestionsAnsweredExtractor(llm=self.llm,questions=5, show_progress=True),
                     ]
                     node_to_metadata = {}
                     for extractor in extractors:
@@ -398,7 +419,7 @@ class RecursiveRetrieverIndexGenerator:
             )
 
             nodes = retriever_chunk.retrieve(
-                "Help to summarize the document content"
+                query
             )
             for node in nodes:
                 logging.info(node.node_id+':\n\n')
