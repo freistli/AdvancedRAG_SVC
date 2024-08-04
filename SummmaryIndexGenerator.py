@@ -47,6 +47,10 @@ from llama_index.core.indices.document_summary import (
     DocumentSummaryIndexLLMRetriever,
 )
 
+from llama_index.llms.ollama import Ollama
+from llama_index.llms.lmstudio import LMStudio
+
+
 load_dotenv('.env_4_SC')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
@@ -103,7 +107,22 @@ class SummaryIndexGenerator:
             "director": "director",
         }
 
-        Settings.llm = self.llm
+        if bool(os.environ['USE_LMSTUDIO'] == 'True'):
+            self.llm = LMStudio(
+                                base_url=os.environ["LLAMACPP_URL"], 
+                                model_name=os.environ["LLAMACPP_MODEL"],  
+                                temperature=0.5,      
+                                max_new_tokens=200,
+                                verbose=True,
+                                is_chat_model=True,
+                                request_timeout=600.0
+                            )
+        elif bool(os.environ['USE_OLLAMA'] == 'True'):
+            self.llm = Ollama(model=os.environ["OLLAMA_MODEL"],
+                               request_timeout=600.0,
+                               base_url=os.environ["OLLAMA_URL"],)
+       
+
         Settings.embed_model = self.embed_model
         #Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
         Settings.node_parser = SentenceSplitter(chunk_size=1024)
@@ -264,7 +283,7 @@ class SummaryIndexGenerator:
                 else:
                     storage_context = StorageContext.from_defaults(docstore=docstore)     
 
-                synthesizer = get_response_synthesizer(response_mode="tree_summarize", use_async=False)
+                synthesizer = get_response_synthesizer(llm=self.llm,response_mode="tree_summarize", use_async=False)
 
                 doc_summary_index = DocumentSummaryIndex.from_documents(
                     docs,
@@ -319,7 +338,8 @@ class SummaryIndexGenerator:
                 self.LoadIndex()        
 
             retriever = DocumentSummaryIndexLLMRetriever(
-                self.index,
+                llm=self.llm,
+                index=self.index,
                 # choice_select_prompt=None,
                 # choice_batch_size=10,
                 # choice_top_k=1,
@@ -392,7 +412,7 @@ def TestIndex():
         result = summaryIndexGenerator.SummaryRetrieverSearch(systemMessage + proofReadContent)
         #result = summaryIndexGenerator.TestSummary()
         for text in result:
-            print(text)
+          print(text)
     
 
 if __name__ == "__main__":
