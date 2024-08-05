@@ -82,8 +82,9 @@ def advchat_bot_view(app=None):
                                                         bubble_full_width = False,
                                                         render=True
                                                         )
-                            chatbot.like(print_like_dislike,None, None)       
-                            textbox_systemMessage = gr.Textbox(default_system_message, label="System Message",visible=True, lines=9)            
+                            chatbot.like(print_like_dislike,None, None)
+                            with gr.Accordion("Chat Settings", open=False):         
+                                textbox_systemMessage = gr.Textbox(default_system_message, label="System Message",visible=True, lines=5)            
                             interface = gr.ChatInterface(fn=chat_bot,
                                             chatbot=chatbot,
                                             additional_inputs=[radtio_ptions, textbox_index, textbox_systemMessage, checkbox_Stream], 
@@ -318,3 +319,14 @@ def csvqueryengine_view(app=None):
                         interface.queue(default_concurrency_limit=Build_Concurrency,max_size=Max_Queue_Size)   
     if app is not None:
         app = gr.mount_gradio_app(app, custom_theme_CSVAnalysis, path="/csvqueryengine")
+
+def toggle_darkmode():
+    return """
+        () => {
+            document.body.classList.toggle('dark');
+        }
+        """
+    
+def darkmode_button():
+    btn = gr.Button("Dark Theme")
+    btn.click(None, [], [], js=toggle_darkmode())

@@ -94,42 +94,48 @@ def read_main():
 
 
 with gr.Blocks(title=f"Advanced RAG Service Studio",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme_Main:
-    
-    if AdvChatBot_Tab is True:
-        with gr.Tab(CHAT_MODE_LABLE) as tab:
-            advchat_bot_view()
+        
+            if AdvChatBot_Tab is True:
+                with gr.Tab(CHAT_MODE_LABLE) as tab:
+                    advchat_bot_view()            
 
-    if AdvProofread_Tab is True:
-        with gr.Tab(ADVANCED_PROOFREAD_LABLE) as tab:
-            adv_proofread_view()
+            if BuildAzureIndex_Tab is True:
+                with gr.Tab(AZURE_AI_SEARCH_LABLE) as tab:
+                    azuresearch_view()           
 
-    if Proofread_Tab is True:
-        with gr.Tab(PROOFREAD_LABLE) as tab:
-            proofread_view()
+            if BuildKGIndex_Tab is True:
+                with gr.Tab(KNOWLEDGE_GRAPH_LABLE) as tab:
+                    knowledgegraph_view() 
 
-    if BuildAzureIndex_Tab is True:
-        with gr.Tab(AZURE_AI_SEARCH_LABLE) as tab:
-            azuresearch_view()
+            if BuildGraphRAGIndex_Tab is True:
+                with gr.Tab(MS_GRAPHRAG_LABLE) as tab:
+                    graphrag_view()    
 
-    if BuildSummaryIndex_Tab is True:
-        with gr.Tab(SUMMARY_INDEX_LABLE) as tab:
-            summaryindex_view()
+            if CSVQueryEngine_Tab is True:
+                with gr.Tab(CSV_AI_ANALYSIS_LABLE) as tab:
+                    csvqueryengine_view()
 
-    if BuildRRIndex_Tab is True:
-        with gr.Tab(RECURSIVE_RETRIEVER_LABLE) as tab:
-            recursive_retriever_view()
+            if BuildSummaryIndex_Tab is True:
+                with gr.Tab(SUMMARY_INDEX_LABLE) as tab:
+                    summaryindex_view()
 
-    if BuildKGIndex_Tab is True:
-       with gr.Tab(KNOWLEDGE_GRAPH_LABLE) as tab:
-        knowledgegraph_view() 
+            if BuildRRIndex_Tab is True:
+                with gr.Tab(RECURSIVE_RETRIEVER_LABLE) as tab:
+                    recursive_retriever_view()
 
-    if BuildGraphRAGIndex_Tab is True:
-       with gr.Tab(MS_GRAPHRAG_LABLE) as tab:
-        graphrag_view()    
+            if Proofread_Tab is True:
+                with gr.Tab(PROOFREAD_LABLE) as tab:
+                    proofread_view()
 
-    if CSVQueryEngine_Tab is True:
-       with gr.Tab(CSV_AI_ANALYSIS_LABLE) as tab:
-        csvqueryengine_view()
+            if AdvProofread_Tab is True:
+                with gr.Tab(ADVANCED_PROOFREAD_LABLE) as tab:
+                    adv_proofread_view()
+
+            
+
+            with gr.Tab("View Setting") as tab:
+                darkmode_button()
+                
 
 app = gr.mount_gradio_app(app, custom_theme_Main, path="/main")
 
