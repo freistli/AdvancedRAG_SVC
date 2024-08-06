@@ -92,7 +92,6 @@ def read_main():
     html_content = f"Thanks for using Advanced RAG Service Studio"
     return html_content
 
-
 with gr.Blocks(title=f"Advanced RAG Service Studio",analytics_enabled=False, css="footer{display:none !important}", js=js,theme=gr.themes.Default(spacing_size="sm", radius_size="none", primary_hue="blue")).queue(default_concurrency_limit=int(os.environ['Predict_Concurrency']),max_size=Max_Queue_Size) as custom_theme_Main:
         
             if AdvChatBot_Tab is True:

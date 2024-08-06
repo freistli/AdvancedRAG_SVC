@@ -80,8 +80,8 @@ llama_index_llm = AzureChatOpenAI(azure_deployment=os.environ['AZURE_OPENAI_Depl
 
 
 llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=1000,
-                                                             model="text-embedding-ada-002",
-                                                             deployment="text-embedding-ada-002",
+                                                             model=Embedding_Mode,
+                                                             deployment=Embedding_Mode,
                                                              openai_api_key=os.environ['AZURE_OPENAI_API_KEY']))
 
 
@@ -175,8 +175,7 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
 
     elif Graph == "rules":
         logging.info("rules")
-        #if rules_index is None:
-        if query_engine is None:
+        if current_graph_path is None or current_graph_path != Graph:
                 if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
                     #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
 
@@ -209,9 +208,8 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
             )
 
             current_fine_Tune = fine_tune
-
                 
-
+            current_graph_path = Graph
         #response_stream = rules_index.as_query_engine(streaming=True,optimizer=optimizer,storage_context=storage_context,graph_traversal_depth=3, verbose=True, similarity_top_k=5).query(QueryRules + "\r\n 以下の文章を校正してください:  \r\n "+content)
         response_stream = query_engine.query(QueryRules + f"\r\n {content_prefix}  \r\n "+content) 
 
@@ -231,7 +229,6 @@ def compose_query(Graph, QueryRules, content, fine_tune=None, content_prefix=os.
         if current_graph_path is None or current_graph_path != Graph:
              rules_storage_dir = Graph
              if os.path.exists(rules_storage_dir+"/docstore.json") and use_storage:
-                    #storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=persist_dir)
                 graph_store = SimpleGraphStore().from_persist_dir(rules_storage_dir)          
                 storage_context = StorageContext.from_defaults(graph_store=graph_store,persist_dir=rules_storage_dir)
                 rulesPath_index = load_index_from_storage(storage_context)

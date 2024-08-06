@@ -1,5 +1,11 @@
 function createGradioAnimation() {
 
+    const url = new URL(window.location);
+
+    if (url.searchParams.get('__theme') !== 'dark') {
+        url.searchParams.set('__theme', 'dark');
+        window.location.href = url.href;
+    }
     
     window.addEventListener('message', event => {
         console.log("posted message arrived at gradio");

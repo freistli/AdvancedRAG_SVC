@@ -38,14 +38,7 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import KnowledgeGraphRAGRetriever
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 from llama_index.core.callbacks import LlamaDebugHandler
-import tiktoken
-import DataFrameAnalysis
-from IndexGenerator import IndexGenerator, StreamingGradioCallbackHandler
-from AzureSearchIndexGenerator import AzureAISearchIndexGenerator
-from RecursiveRetrieverIndexGenerator import RecursiveRetrieverIndexGenerator
-from SummmaryIndexGenerator import SummaryIndexGenerator
-from GraphRagIndexGenerator import GraphRagIndexGenerator
-import networkx as nx
+
 from pyvis.network import Network
 from uvicorn import run
 import multiprocessing
@@ -53,6 +46,8 @@ import uvicorn
 
 
 load_dotenv('.env_4_SC')
+
+Embedding_Mode = os.environ['AZURE_OPENAI_EMBEDDING_Deployment']
 
 Predict_Concurrency = int(os.environ['Predict_Concurrency'])
 Build_Concurrency = int(os.environ['Build_Concurrency'])

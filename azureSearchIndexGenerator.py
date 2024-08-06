@@ -40,6 +40,7 @@ from llama_index.core.callbacks import LlamaDebugHandler
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 import tiktoken
 from llama_index.core.query_engine import SubQuestionQueryEngine
+from Environment import *
 
 
 load_dotenv('.env_4_SC')
@@ -69,7 +70,7 @@ class AzureAISearchIndexGenerator:
         )
         
         self.embed_model = AzureOpenAIEmbedding(
-            deployment_name="text-embedding-ada-002",
+            deployment_name= Embedding_Mode,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,

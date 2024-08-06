@@ -49,7 +49,7 @@ from llama_index.core.indices.document_summary import (
 
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
-
+from Environment import *
 
 load_dotenv('.env_4_SC')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
@@ -76,7 +76,7 @@ class SummaryIndexGenerator:
         )
         
         self.embed_model = AzureOpenAIEmbedding(
-            deployment_name="text-embedding-ada-002",
+            deployment_name=Embedding_Mode,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,

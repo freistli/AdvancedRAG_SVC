@@ -42,7 +42,7 @@ import tiktoken
 from llama_index.core.schema import IndexNode
 from llama_index.core.retrievers import RecursiveRetriever
 import pickle
-
+from Environment import *
 import copy
 
 from llama_index.llms.ollama import Ollama
@@ -78,7 +78,7 @@ class RecursiveRetrieverIndexGenerator:
         )
         
         self.embed_model = AzureOpenAIEmbedding(
-            deployment_name="text-embedding-ada-002",
+            deployment_name=Embedding_Mode,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,

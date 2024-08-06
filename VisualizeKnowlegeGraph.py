@@ -31,7 +31,7 @@ import tempfile
 import logging
 import networkx as nx
 from pyvis.network import Network
-
+from Environment import *
 from matplotlib import pyplot as plt
 
 load_dotenv('.env_4_SC')
@@ -77,8 +77,8 @@ llama_index_llm = AzureChatOpenAI(azure_deployment=os.environ['AZURE_OPENAI_Depl
 
 
 llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=1000,
-                                                             model="text-embedding-ada-002",
-                                                             deployment="text-embedding-ada-002",
+                                                             model=Embedding_Mode,
+                                                             deployment=Embedding_Mode,
                                                              openai_api_key=os.environ['AZURE_OPENAI_API_KEY']))
  
 Settings.llm = llama_index_llm

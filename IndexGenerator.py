@@ -46,6 +46,7 @@ from enum import Enum
 import shutil
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
+from Environment import *
 
 load_dotenv('.env_4_SC')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
@@ -110,8 +111,8 @@ llama_index_llm = AzureChatOpenAI(azure_deployment=os.environ['AZURE_OPENAI_Depl
 
 
 llama_index_embed_model = LangchainEmbedding(AzureOpenAIEmbeddings(chunk_size=1000,
-                                                             model="text-embedding-ada-002",
-                                                             deployment="text-embedding-ada-002",
+                                                             model=Embedding_Mode,
+                                                             deployment=Embedding_Mode,
                                                              openai_api_key=os.environ['AZURE_OPENAI_API_KEY']))
  
 Settings.llm = llama_index_llm
