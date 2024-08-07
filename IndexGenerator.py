@@ -48,7 +48,7 @@ from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
 from Environment import *
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
@@ -94,7 +94,7 @@ class StreamingGradioCallbackHandler(BaseCallbackHandler):
         """Run when LLM errors."""
         self.q.put(self.job_done)
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 
 endpoint = os.environ['DOC_AI_BASE']
 key = os.environ['DOC_AI_KEY']

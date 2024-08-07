@@ -68,7 +68,7 @@ from Environment import *
 from GradioView import *
 
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 
 optimizer = SentenceEmbeddingOptimizer(
     percentile_cutoff=0.5,

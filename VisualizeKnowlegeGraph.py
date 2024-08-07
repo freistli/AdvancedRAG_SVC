@@ -34,7 +34,7 @@ from pyvis.network import Network
 from Environment import *
 from matplotlib import pyplot as plt
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 

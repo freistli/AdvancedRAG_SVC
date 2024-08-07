@@ -46,7 +46,7 @@ import uvicorn
 from BlockScripts import *
 
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 
 Embedding_Mode = os.environ['AZURE_OPENAI_EMBEDDING_Deployment']
 

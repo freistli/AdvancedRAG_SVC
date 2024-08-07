@@ -14,7 +14,7 @@ from llama_index.core import Settings
 
 from llama_index.llms.openai import OpenAI
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 

@@ -51,7 +51,7 @@ from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
 from Environment import *
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))

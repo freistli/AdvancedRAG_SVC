@@ -36,7 +36,7 @@ import tempfile
 import logging
 from Environment import *
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
@@ -73,7 +73,7 @@ composeGraph = None
 
 
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 
 endpoint = os.environ['DOC_AI_BASE']
 key = os.environ['DOC_AI_KEY']

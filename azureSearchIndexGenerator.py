@@ -43,7 +43,7 @@ from llama_index.core.query_engine import SubQuestionQueryEngine
 from Environment import *
 
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 

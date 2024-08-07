@@ -53,7 +53,7 @@ from llama_index.core.extractors import (
     QuestionsAnsweredExtractor,
 )
 
-load_dotenv('.env_4_SC')
+load_dotenv('.env')
 #logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
 logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
 logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
