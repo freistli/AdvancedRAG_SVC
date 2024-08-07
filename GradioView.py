@@ -328,5 +328,5 @@ def toggle_darkmode():
         """
     
 def darkmode_button():
-    btn = gr.Button("Dark Theme")
+    btn = gr.Button("Switch Theme")
     btn.click(None, [], [], js=toggle_darkmode())

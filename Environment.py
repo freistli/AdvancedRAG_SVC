@@ -43,6 +43,7 @@ from pyvis.network import Network
 from uvicorn import run
 import multiprocessing
 import uvicorn
+from BlockScripts import *
 
 
 load_dotenv('.env_4_SC')
@@ -143,20 +144,6 @@ current_fine_Tune = None
 current_graph_path = None
 proofread_chunk = 500
 
-
-js = "custom.js"
-
-css = """
-footer{display:none !important}
-[role="tab"]
-{
-   font-family: 'Arial', sans-serif;
-   font-size: 20px;
-   font-weight: bold;
-}
-"""
-
-
 doc_endpoint = os.environ['DOC_AI_BASE']
 doc_key = os.environ['DOC_AI_KEY']
 
@@ -175,3 +162,4 @@ message = HumanMessage(
 )
 
 default_system_message = os.environ['Default_System_Message']
+
