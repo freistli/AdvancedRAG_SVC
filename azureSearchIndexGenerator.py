@@ -61,7 +61,7 @@ class AzureAISearchIndexGenerator:
         self.docai_endpoint = os.environ['DOC_AI_BASE']
         self.docai_api_key = os.environ['DOC_AI_KEY']
 
-        self.llm = AzureOpenAI(
+        self.llm = AzureChatOpenAI(
             deployment_name = self.aoai_modeldeploy_name,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,

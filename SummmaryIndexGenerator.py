@@ -16,7 +16,7 @@ import time
 import Common
 from langchain_text_splitters import MarkdownTextSplitter
 from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
-from llama_index.llms.azure_openai import AzureOpenAI
+
 from dotenv import load_dotenv
 
 from llama_index.vector_stores.azureaisearch import AzureAISearchVectorStore, IndexManagement, MetadataIndexFieldType
@@ -51,10 +51,6 @@ from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
 from Environment import *
 
-load_dotenv('.env')
-#logging.basicConfig(stream=sys.stdout, level=logging.INFO,format='%(message)s')
-logging.basicConfig(stream=sys.stdout, level=os.environ['LOG_LEVEL'])
-logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
 
 class SummaryIndexGenerator:
     def __init__(self, docPath, indexName, idPrefix):
@@ -68,19 +64,13 @@ class SummaryIndexGenerator:
         self.docai_endpoint = os.environ['DOC_AI_BASE']
         self.docai_api_key = os.environ['DOC_AI_KEY']
 
-        self.llm = AzureOpenAI(
+        self.llm = AzureChatOpenAI(
             deployment_name = self.aoai_modeldeploy_name,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,
         )
         
-        self.embed_model = AzureOpenAIEmbedding(
-            deployment_name=Embedding_Mode,
-            api_key=self.aoai_api_key,
-            azure_endpoint=self.aoai_endpoint,
-            api_version=self.aoai_api_version,
-        )
 
         self.search_service_api_key = os.environ['AZURE_SEARCH_API_KEY']
         self.search_service_endpoint = os.environ['AZURE_SEARCH_ENDPOINT']
@@ -93,19 +83,9 @@ class SummaryIndexGenerator:
             credential= AzureKeyCredential(self.search_service_api_key)
         )
 
-        self.searchClient = SearchClient(
-            endpoint=self.search_service_endpoint,
-            index_name=self.index_name,
-            credential=AzureKeyCredential(self.search_service_api_key)
-        )
 
         self.docClient = DocumentIntelligenceClient(self.docai_endpoint, AzureKeyCredential(self.docai_api_key))
 
-        self.metadata_fields = {
-            "author": "author",
-            "theme": ("topic", MetadataIndexFieldType.STRING),
-            "director": "director",
-        }
 
         if bool(os.environ['USE_LMSTUDIO'] == 'True'):
             self.llm = LMStudio(
@@ -123,7 +103,6 @@ class SummaryIndexGenerator:
                                base_url=os.environ["OLLAMA_URL"],)
        
 
-        Settings.embed_model = self.embed_model
         #Settings.node_parser = SemanticSplitterNodeParser(buffer_size=1, breakpoint_percentile_threshold=95,embed_model=self.embed_model)
         Settings.node_parser = SentenceSplitter(chunk_size=1024)
         self.llama_debug = LlamaDebugHandler(print_trace_on_end=True)
@@ -160,11 +139,7 @@ class SummaryIndexGenerator:
         self.all_nodes_dict = None
 
         self.index = None
-
-        self.response_synthesizer = get_response_synthesizer(
-            response_mode="tree_summarize", use_async=False, streaming=True
-        )
-    
+       
 
     def LoadIndex(self,indexFolder=""):
         partialMessage = ""
@@ -281,15 +256,17 @@ class SummaryIndexGenerator:
                 if os.path.exists(self.index_persist_dir+"/docstore.json"):
                     storage_context = StorageContext.from_defaults(docstore=docstore,persist_dir=self.index_persist_dir)
                 else:
-                    storage_context = StorageContext.from_defaults(docstore=docstore)     
+                    storage_context = StorageContext.from_defaults(docstore=docstore) 
 
-                synthesizer = get_response_synthesizer(llm=self.llm,response_mode="tree_summarize", use_async=False)
-
+                Settings.context_window = 4096
+                response_synthesizer = get_response_synthesizer(llm=self.llm, response_mode="tree_summarize", 
+                                                             use_async=True)    
+                
                 doc_summary_index = DocumentSummaryIndex.from_documents(
                     docs,
                     llm=self.llm,
                     transformations=[splitter],
-                    response_synthesizer=synthesizer,
+                    response_synthesizer=response_synthesizer,
                     show_progress=True,
                     storage_context=storage_context,
                 )                
@@ -337,6 +314,8 @@ class SummaryIndexGenerator:
             if self.index is None:
                 self.LoadIndex()        
 
+            '''
+
             retriever = DocumentSummaryIndexLLMRetriever(
                 llm=self.llm,
                 index=self.index,
@@ -347,7 +326,7 @@ class SummaryIndexGenerator:
                 # parse_choice_select_answer_fn=None,
             )
 
-            '''
+            
             nodes = retriever.retrieve(
                 query
             )
@@ -360,10 +339,13 @@ class SummaryIndexGenerator:
             for node in nodes:
                 logging.info(node.node_id+':\n\n')
                 logging.info(node.text)
-            '''
+            
             self.query_engine = RetrieverQueryEngine.from_args(retriever=retriever, llm=self.llm, streaming=True, 
                                                                response_synthesizer=self.response_synthesizer,
                                                                use_async=False)
+            
+            '''
+            self.query_engine = self.index.as_query_engine(self.llm,streaming=True,response_mode="tree_summarize", use_async=True)
 
             response_stream = self.query_engine.query(query)
             

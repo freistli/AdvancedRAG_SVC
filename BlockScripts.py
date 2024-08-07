@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv('.env')
 
 default_theme = os.environ['Default_Theme']
 
