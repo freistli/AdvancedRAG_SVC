@@ -46,9 +46,9 @@ from llama_index.core import DocumentSummaryIndex,get_response_synthesizer
 from llama_index.core.indices.document_summary import (
     DocumentSummaryIndexLLMRetriever,
 )
-
 from llama_index.llms.ollama import Ollama
 from llama_index.llms.lmstudio import LMStudio
+from llama_index.llms.langchain import LangChainLLM
 from Environment import *
 
 
@@ -64,12 +64,12 @@ class SummaryIndexGenerator:
         self.docai_endpoint = os.environ['DOC_AI_BASE']
         self.docai_api_key = os.environ['DOC_AI_KEY']
 
-        self.llm = AzureChatOpenAI(
+        self.llm = LangChainLLM(AzureChatOpenAI(
             deployment_name = self.aoai_modeldeploy_name,
             api_key=self.aoai_api_key,
             azure_endpoint=self.aoai_endpoint,
             api_version=self.aoai_api_version,
-        )
+        ))
         
 
         self.search_service_api_key = os.environ['AZURE_SEARCH_API_KEY']
